@@ -44,7 +44,7 @@ authForm?.addEventListener("submit", async event => {
     setSession(authRole, data);
 
     try {
-      await resolveCurrentAccount(authRole, true);
+      await resolveCurrentAccount(authRole);
     } catch {
       showToast("Login worked, but profile ID could not be resolved yet.", "warning");
     }

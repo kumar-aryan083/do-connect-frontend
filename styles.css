@@ -84,6 +84,11 @@ button:disabled {
   background: var(--danger);
 }
 
+.danger.ghost-btn {
+  background: transparent;
+  color: var(--danger);
+}
+
 .success-btn {
   background: var(--success);
 }
@@ -94,7 +99,8 @@ button:disabled {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -107,15 +113,18 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(20, 92, 95, 0.13);
 }
 
 .admin-shell input:focus,
 .admin-shell textarea:focus,
+.admin-shell select:focus,
 .admin-auth input:focus,
-.admin-auth textarea:focus {
+.admin-auth textarea:focus,
+.admin-auth select:focus {
   border-color: var(--admin);
   box-shadow: 0 0 0 3px rgba(124, 45, 72, 0.13);
 }
@@ -416,11 +425,18 @@ p {
 }
 
 .app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 20px;
+  margin: -26px -26px 20px;
+  padding: 18px 26px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(247, 245, 240, 0.94);
+  backdrop-filter: blur(10px);
 }
 
 .app-topbar h1 {
@@ -501,12 +517,164 @@ p {
   margin-bottom: 16px;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .workspace-grid,
 .split-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
+}
+
+.compact-workspace {
+  grid-template-columns: minmax(0, 620px);
+}
+
+.qa-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  gap: 18px;
+  align-items: start;
+}
+
+.qa-main {
+  min-width: 0;
+}
+
+.question-search-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.question-feed {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.question-row {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.question-stats {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  color: var(--muted);
+  text-align: right;
+}
+
+.question-stats div {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 8px;
+}
+
+.question-stats strong,
+.side-stat span {
+  display: block;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.question-stats span,
+.question-tags,
+.side-panel p,
+.side-stat p,
+.contact-item small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.question-stats .resolved-count {
+  border-color: #b9ddc5;
+  color: var(--success);
+}
+
+.question-stats .resolved-count strong {
+  color: var(--success);
+}
+
+.question-summary {
+  min-width: 0;
+}
+
+.question-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.question-title-row h3 {
+  margin: 0 0 8px;
+  color: var(--primary-strong);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.question-summary p {
+  margin-bottom: 10px;
+  color: #3b424d;
+  line-height: 1.5;
+}
+
+.question-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.compact-actions {
+  margin-top: 12px;
+}
+
+.qa-sidebar {
+  display: grid;
+  gap: 12px;
+  position: sticky;
+  top: 92px;
+}
+
+.side-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.side-panel h3 {
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.side-stat {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.side-stat p {
+  margin: 0;
 }
 
 .panel-card {
@@ -529,6 +697,16 @@ p {
 .toolbar-row {
   max-width: 620px;
   margin-bottom: 18px;
+}
+
+.wide-toolbar {
+  max-width: 860px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  gap: 10px;
 }
 
 .hint-box {
@@ -671,6 +849,11 @@ p {
   overflow-wrap: anywhere;
 }
 
+.mini-card button {
+  width: 100%;
+  margin-top: 10px;
+}
+
 .chat-bubble {
   width: min(720px, 100%);
   border: 1px solid var(--line);
@@ -687,6 +870,119 @@ p {
 
 .chat-bubble p {
   margin: 8px 0 0;
+}
+
+.chat-workspace {
+  min-height: 560px;
+  display: grid;
+  grid-template-columns: minmax(230px, 320px) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.chat-contacts-panel {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.chat-search {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.contact-list {
+  display: grid;
+  align-content: start;
+  max-height: 620px;
+  overflow-y: auto;
+}
+
+.contact-item {
+  width: 100%;
+  min-height: 68px;
+  justify-content: flex-start;
+  gap: 10px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.contact-item:hover,
+.contact-item.active {
+  background: #e8f1ee;
+  filter: none;
+}
+
+.contact-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #efb64a;
+  color: #261704;
+  font-weight: 950;
+}
+
+.contact-item strong,
+.contact-item small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.conversation-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.conversation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.conversation-header h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.conversation-lookup {
+  display: grid;
+  grid-template-columns: 110px auto;
+  gap: 8px;
+}
+
+.conversation-list {
+  align-content: end;
+  gap: 10px;
+  min-height: 360px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding: 16px;
+  background: #fbfaf7;
+}
+
+.chat-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: #fff;
 }
 
 .profile-card {
@@ -724,22 +1020,6 @@ p {
   border-top: 0;
 }
 
-.edit-box {
-  margin-top: 14px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.edit-box summary {
-  cursor: pointer;
-  color: var(--admin);
-  font-weight: 900;
-}
-
-.edit-box form {
-  margin-top: 12px;
-}
-
 .empty-state {
   border: 1px dashed var(--line);
   border-radius: 8px;
@@ -750,6 +1030,109 @@ p {
 
 .error-text {
   color: var(--danger);
+}
+
+.modal-open {
+  overflow: hidden;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  place-items: center;
+  padding: 22px;
+  background: rgba(20, 24, 31, 0.54);
+}
+
+.modal-overlay.active {
+  display: grid;
+}
+
+.modal-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 44px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 26px 70px rgba(19, 27, 36, 0.28);
+}
+
+.modal-large .modal-dialog {
+  width: min(720px, 100%);
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+  padding: 20px;
+}
+
+.modal-header {
+  padding-right: 58px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.modal-body {
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.modal-admin input:focus,
+.modal-admin textarea:focus,
+.modal-admin select:focus {
+  border-color: var(--admin);
+  box-shadow: 0 0 0 3px rgba(124, 45, 72, 0.13);
+}
+
+.modal-dialog[data-danger="true"] .modal-header {
+  background: #fff5f4;
+}
+
+.confirm-copy p {
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.confirm-copy span {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .message,
@@ -848,10 +1231,23 @@ p {
     padding: 18px;
   }
 
+  .app-topbar {
+    margin-left: -18px;
+    margin-right: -18px;
+    margin-top: -18px;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
   .app-topbar,
   .panel-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .panel-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .topbar-actions {
@@ -863,18 +1259,71 @@ p {
   .user-shell .dashboard-stats,
   .workspace-grid,
   .split-cards,
+  .qa-layout,
+  .chat-workspace,
   .compact-cards {
     grid-template-columns: 1fr;
   }
 
+  .qa-sidebar {
+    position: static;
+  }
+
+  .question-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .question-stats {
+    display: flex;
+    flex-wrap: wrap;
+    text-align: left;
+  }
+
+  .chat-contacts-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .contact-list {
+    max-height: 280px;
+  }
+
+  .conversation-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .conversation-lookup {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
   .search-row,
-  .inline-composer.compact {
+  .question-search-bar,
+  .filter-row,
+  .inline-composer.compact,
+  .chat-composer {
     grid-template-columns: 1fr;
   }
 
   .card-actions button,
-  .role-actions .btn {
+  .role-actions .btn,
+  .modal-footer button {
     width: 100%;
+  }
+
+  .modal-overlay {
+    align-items: end;
+    padding: 14px;
+  }
+
+  .modal-dialog {
+    max-height: calc(100vh - 28px);
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
   }
 
   .profile-card {
@@ -893,6 +1342,13 @@ p {
   .role-panel,
   .auth-aside,
   .app-main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .app-topbar {
+    margin-left: -16px;
+    margin-right: -16px;
     padding-left: 16px;
     padding-right: 16px;
   }

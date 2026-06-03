@@ -71,7 +71,19 @@
           <p class="eyebrow">Question CRUD</p>
           <h2>Approve and close questions</h2>
         </div>
-        <button id="loadQuestionsBtn" class="secondary-btn admin-tone">Load Questions</button>
+        <div class="panel-actions">
+          <button id="loadQuestionsBtn" class="secondary-btn admin-tone">Refresh Questions</button>
+        </div>
+      </div>
+      <div class="filter-row toolbar-row wide-toolbar">
+        <input id="questionAdminSearch" placeholder="Search questions by title, topic, user, or ID" />
+        <select id="questionStatusFilter" aria-label="Filter questions by status">
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="resolved">Resolved</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
       <div id="questionsList" class="cards moderation-list"></div>
     </section>
@@ -82,7 +94,18 @@
           <p class="eyebrow">Answer Moderation</p>
           <h2>Approve useful answers</h2>
         </div>
-        <button id="loadAnswersBtn" class="secondary-btn admin-tone">Load Answers</button>
+        <div class="panel-actions">
+          <button id="loadAnswersBtn" class="secondary-btn admin-tone">Refresh Answers</button>
+        </div>
+      </div>
+      <div class="filter-row toolbar-row wide-toolbar">
+        <input id="answerAdminSearch" placeholder="Search answers by content, question, user, or ID" />
+        <select id="answerStatusFilter" aria-label="Filter answers by status">
+          <option value="all">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
       <div id="answersList" class="cards moderation-list"></div>
     </section>
@@ -93,7 +116,17 @@
           <p class="eyebrow">User CRUD</p>
           <h2>Manage users</h2>
         </div>
-        <button id="loadUsersBtn" class="secondary-btn admin-tone">Load Users</button>
+        <div class="panel-actions">
+          <button id="loadUsersBtn" class="secondary-btn admin-tone">Refresh Users</button>
+        </div>
+      </div>
+      <div class="filter-row toolbar-row wide-toolbar">
+        <input id="userAdminSearch" placeholder="Search users by name, email, role, or ID" />
+        <select id="userStatusFilter" aria-label="Filter users by status">
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
       <div id="usersList" class="cards moderation-list"></div>
     </section>
@@ -104,7 +137,17 @@
           <p class="eyebrow">Admin CRUD</p>
           <h2>Manage admins</h2>
         </div>
-        <button id="loadAdminsBtn" class="secondary-btn admin-tone">Load Admins</button>
+        <div class="panel-actions">
+          <button id="loadAdminsBtn" class="secondary-btn admin-tone">Refresh Admins</button>
+        </div>
+      </div>
+      <div class="filter-row toolbar-row wide-toolbar">
+        <input id="adminAdminSearch" placeholder="Search admins by name, email, role, or ID" />
+        <select id="adminStatusFilter" aria-label="Filter admins by status">
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
       <div id="adminsList" class="cards moderation-list"></div>
     </section>

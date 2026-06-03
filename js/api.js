@@ -102,7 +102,10 @@ async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const message = data?.message || data?.error || data?.detail || data || `Request failed with ${response.status}`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -233,4 +236,192 @@ function setupNavigation() {
 
 function updateStat(id, value) {
   setText(id, value ?? 0);
+}
+
+let activeModal = null;
+let focusedBeforeModal = null;
+
+function ensureModalRoot() {
+  let modal = document.getElementById("appModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "appModal";
+  modal.className = "modal-overlay";
+  modal.setAttribute("hidden", "");
+  modal.innerHTML = `
+    <section class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" type="button" data-modal-close aria-label="Close dialog">x</button>
+      <div class="modal-header">
+        <p id="modalEyebrow" class="eyebrow"></p>
+        <h2 id="modalTitle"></h2>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+      <div id="modalFooter" class="modal-footer"></div>
+    </section>
+  `;
+  document.body.appendChild(modal);
+
+  modal.addEventListener("click", event => {
+    if (event.target === modal && modal.dataset.closeOnBackdrop !== "false") {
+      closeModal();
+    }
+  });
+
+  modal.querySelector("[data-modal-close]")?.addEventListener("click", () => closeModal());
+  document.addEventListener("keydown", handleModalKeydown);
+
+  return modal;
+}
+
+function handleModalKeydown(event) {
+  if (!activeModal || event.key !== "Escape" || activeModal.dataset.locked === "true") return;
+  closeModal();
+}
+
+function openModal(config = {}) {
+  const modal = ensureModalRoot();
+  const dialog = modal.querySelector(".modal-dialog");
+  const eyebrow = modal.querySelector("#modalEyebrow");
+  const title = modal.querySelector("#modalTitle");
+  const body = modal.querySelector("#modalBody");
+  const footer = modal.querySelector("#modalFooter");
+  const closeButton = modal.querySelector("[data-modal-close]");
+
+  focusedBeforeModal = document.activeElement;
+  activeModal = modal;
+  modal.dataset.closeOnBackdrop = String(config.closeOnBackdrop !== false);
+  modal.dataset.locked = "false";
+  modal.className = `modal-overlay active ${config.tone ? `modal-${config.tone}` : ""} ${config.size ? `modal-${config.size}` : ""}`.trim();
+  modal.removeAttribute("hidden");
+  document.body.classList.add("modal-open");
+
+  dialog.dataset.danger = config.danger ? "true" : "false";
+  title.textContent = config.title || "Dialog";
+  eyebrow.textContent = config.eyebrow || "";
+  eyebrow.hidden = !config.eyebrow;
+  body.innerHTML = config.body || "";
+  footer.innerHTML = "";
+  closeButton.disabled = false;
+
+  const cancelText = config.cancelText || "Cancel";
+  if (config.showCancel !== false) {
+    footer.insertAdjacentHTML("beforeend", `<button type="button" class="secondary-btn" data-modal-cancel>${escapeHtml(cancelText)}</button>`);
+    footer.querySelector("[data-modal-cancel]")?.addEventListener("click", () => closeModal());
+  }
+
+  if (config.submitText) {
+    const submitClass = config.danger ? "danger" : (config.tone === "admin" ? "admin-tone" : "");
+    footer.insertAdjacentHTML(
+      "beforeend",
+      `<button type="button" class="${submitClass}" data-modal-submit>${escapeHtml(config.submitText)}</button>`
+    );
+  }
+
+  const submitButton = footer.querySelector("[data-modal-submit]");
+  const form = body.querySelector("form");
+  const modalApi = {
+    close: closeModal,
+    getForm: () => form,
+    setBusy: (busy, label) => setModalBusy(busy, label)
+  };
+
+  if (form && config.onSubmit) {
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      config.onSubmit(event, modalApi);
+    });
+  }
+
+  submitButton?.addEventListener("click", () => {
+    if (form) {
+      form.requestSubmit();
+      return;
+    }
+    config.onSubmit?.(null, modalApi);
+  });
+
+  modal.onCloseModal = config.onClose || null;
+
+  window.setTimeout(() => {
+    const firstFocusable = modal.querySelector("input, textarea, select")
+      || modal.querySelector("[data-modal-submit]")
+      || modal.querySelector("button:not([disabled]), [tabindex]:not([tabindex='-1'])");
+    firstFocusable?.focus();
+  }, 0);
+
+  return modalApi;
+}
+
+function setModalBusy(busy, label = "Working...") {
+  const modal = activeModal;
+  if (!modal) return;
+
+  modal.dataset.locked = busy ? "true" : "false";
+  modal.querySelectorAll("button, input, textarea, select").forEach(element => {
+    if (busy) {
+      element.dataset.modalDisabled = element.disabled ? "true" : "false";
+      element.disabled = true;
+    } else {
+      element.disabled = element.dataset.modalDisabled === "true";
+      delete element.dataset.modalDisabled;
+    }
+  });
+
+  const submitButton = modal.querySelector("[data-modal-submit]");
+  if (!submitButton) return;
+  if (busy) {
+    submitButton.dataset.originalText = submitButton.textContent;
+    submitButton.textContent = label;
+  } else {
+    submitButton.textContent = submitButton.dataset.originalText || submitButton.textContent;
+  }
+}
+
+function closeModal() {
+  const modal = activeModal || document.getElementById("appModal");
+  if (!modal || modal.hasAttribute("hidden") || modal.dataset.locked === "true") return;
+
+  const onClose = modal.onCloseModal;
+  modal.setAttribute("hidden", "");
+  modal.className = "modal-overlay";
+  modal.querySelector("#modalBody").innerHTML = "";
+  modal.querySelector("#modalFooter").innerHTML = "";
+  document.body.classList.remove("modal-open");
+  activeModal = null;
+  modal.onCloseModal = null;
+
+  if (typeof onClose === "function") onClose();
+  if (focusedBeforeModal?.isConnected && typeof focusedBeforeModal.focus === "function") {
+    focusedBeforeModal.focus();
+  }
+  focusedBeforeModal = null;
+}
+
+function openConfirmModal(config = {}) {
+  return openModal({
+    title: config.title || "Confirm action",
+    eyebrow: config.eyebrow || "Please confirm",
+    body: `
+      <div class="confirm-copy">
+        <p>${escapeHtml(config.message || "This action cannot be undone.")}</p>
+        ${config.detail ? `<span>${escapeHtml(config.detail)}</span>` : ""}
+      </div>
+    `,
+    submitText: config.confirmText || "Confirm",
+    cancelText: config.cancelText || "Cancel",
+    danger: config.danger !== false,
+    tone: config.tone,
+    onSubmit: async (event, modal) => {
+      modal.setBusy(true, config.busyText || "Working...");
+      try {
+        await config.onConfirm?.();
+        modal.setBusy(false);
+        modal.close();
+      } catch (error) {
+        modal.setBusy(false);
+        if (!error.toastShown) showToast(error.message, "error");
+      }
+    }
+  });
 }

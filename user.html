@@ -52,34 +52,32 @@
           <p class="eyebrow">Q&A Threads</p>
           <h2>Ask, search, and answer</h2>
         </div>
-        <button id="refreshQuestionsBtn" class="secondary-btn">Refresh</button>
+        <div class="panel-actions">
+          <button id="openQuestionModalBtn">Ask Question</button>
+          <button id="refreshQuestionsBtn" class="secondary-btn">Refresh</button>
+        </div>
       </div>
 
-      <div class="workspace-grid">
-        <article class="panel-card">
-          <h3>Ask a question</h3>
-          <form id="questionForm" class="form-stack">
-            <label for="questionTitle">Title</label>
-            <input id="questionTitle" placeholder="Example: How does JWT validation work?" required />
-            <label for="questionTopic">Topic</label>
-            <input id="questionTopic" placeholder="Java, Spring Boot, SQL..." required />
-            <label for="questionDescription">Description</label>
-            <textarea id="questionDescription" placeholder="Describe your issue clearly for other users." required></textarea>
-            <button id="askQuestionBtn" type="submit">Submit for Approval</button>
-          </form>
-        </article>
-
-        <article class="panel-card">
-          <h3>Search approved questions</h3>
-          <div class="search-row">
-            <input id="searchKeyword" placeholder="Search by topic or text" />
+      <div class="qa-layout">
+        <div class="qa-main">
+          <article class="question-search-bar">
+            <input id="searchKeyword" placeholder="Search questions by topic, title, or text" />
             <button id="searchBtn" class="secondary-btn">Search</button>
-          </div>
-          <div class="hint-box">Only approved and active questions appear in the user workspace.</div>
-        </article>
+          </article>
+          <div id="questionsList" class="question-feed"></div>
+        </div>
+        <aside class="qa-sidebar" aria-label="Question workspace summary">
+          <article class="side-panel">
+            <h3>DoConnect Q&A</h3>
+            <p>Browse approved questions, open answers, and contribute helpful responses for review.</p>
+          </article>
+          <article class="side-panel">
+            <h3>Quick stats</h3>
+            <div class="side-stat"><span id="sideQuestionCount">0</span><p>approved questions</p></div>
+            <div class="side-stat"><span id="sideAnswerCount">0</span><p>visible answers</p></div>
+          </article>
+        </aside>
       </div>
-
-      <div id="questionsList" class="cards question-feed"></div>
     </section>
 
     <section id="chatSection" class="panel">
@@ -88,33 +86,40 @@
           <p class="eyebrow">User Chat</p>
           <h2>Conversation</h2>
         </div>
-        <button id="loadUsersBtn" class="secondary-btn">Load Users</button>
+        <div class="panel-actions">
+          <button id="openMessageModalBtn">New Message</button>
+          <button id="loadUsersBtn" class="secondary-btn">Refresh Users</button>
+        </div>
       </div>
 
-      <div class="workspace-grid">
-        <article class="panel-card">
-          <h3>Send message</h3>
-          <form id="chatForm" class="form-stack">
-            <label for="receiverId">Receiver User ID</label>
-            <input id="receiverId" type="number" min="1" placeholder="Enter receiver user ID" required />
-            <label for="chatMessage">Message</label>
-            <textarea id="chatMessage" placeholder="Write your message" required></textarea>
-            <button id="sendMessageBtn" type="submit">Send Message</button>
-          </form>
-        </article>
-
-        <article class="panel-card">
-          <h3>Open conversation</h3>
-          <div class="form-stack">
-            <label for="conversationUserId">Other User ID</label>
-            <input id="conversationUserId" type="number" min="1" placeholder="Enter user ID" />
-            <button id="loadConversationBtn" class="secondary-btn">Load Conversation</button>
+      <div class="chat-workspace">
+        <aside class="chat-contacts-panel">
+          <div class="chat-search">
+            <input id="contactSearch" placeholder="Search users" />
           </div>
-        </article>
-      </div>
+          <div id="usersList" class="contact-list"></div>
+        </aside>
 
-      <div id="usersList" class="cards compact-cards"></div>
-      <div id="chatList" class="cards chat-list"></div>
+        <section class="conversation-panel">
+          <header class="conversation-header">
+            <div>
+              <p class="eyebrow">Selected conversation</p>
+              <h3 id="conversationTitle">Choose a user</h3>
+            </div>
+            <div class="conversation-lookup">
+              <input id="conversationUserId" type="number" min="1" placeholder="User ID" />
+              <button id="loadConversationBtn" class="secondary-btn">Open</button>
+            </div>
+          </header>
+          <div id="chatList" class="chat-list conversation-list">
+            <div class="empty-state">Select a user from the list to open a conversation.</div>
+          </div>
+          <form id="chatComposerForm" class="chat-composer">
+            <input id="chatComposerInput" name="message" placeholder="Write a message to the selected user" disabled required />
+            <button id="sendSelectedMessageBtn" type="submit" disabled>Send</button>
+          </form>
+        </section>
+      </div>
     </section>
 
     <section id="profileSection" class="panel">

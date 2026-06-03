@@ -1,4 +1,6 @@
 const userSession = requireSession("USER");
+let userDirectory = [];
+let selectedChatUserId = null;
 
 if (userSession) {
   setupNavigation();
@@ -10,7 +12,7 @@ async function bootUserDashboard() {
   bindUserEvents();
 
   try {
-    await resolveCurrentAccount("USER", true);
+    await resolveCurrentAccount("USER");
   } catch {
     showToast("Profile ID could not be resolved. User actions may need backend data loaded first.", "warning");
   }
@@ -29,34 +31,40 @@ function bindUserEvents() {
     window.location.href = "user-login.html";
   });
 
+  document.getElementById("openQuestionModalBtn")?.addEventListener("click", openQuestionModal);
+  document.getElementById("openMessageModalBtn")?.addEventListener("click", () => openMessageModal());
   document.getElementById("refreshQuestionsBtn")?.addEventListener("click", () => loadQuestions());
   document.getElementById("searchBtn")?.addEventListener("click", () => searchQuestions());
   document.getElementById("loadUsersBtn")?.addEventListener("click", () => loadUsers());
   document.getElementById("loadConversationBtn")?.addEventListener("click", () => loadConversation());
   document.getElementById("reloadProfileBtn")?.addEventListener("click", () => loadProfile(true));
-
-  document.getElementById("questionForm")?.addEventListener("submit", createQuestion);
-  document.getElementById("chatForm")?.addEventListener("submit", sendMessage);
+  document.getElementById("contactSearch")?.addEventListener("input", renderUserContacts);
+  document.getElementById("chatComposerForm")?.addEventListener("submit", sendSelectedMessage);
 
   document.getElementById("questionsList")?.addEventListener("click", event => {
-    const action = event.target.dataset.action;
+    const target = event.target.closest("[data-action]");
+    const action = target?.dataset.action;
     if (action === "load-answers") {
-      loadAnswers(Number(event.target.dataset.questionId));
+      loadAnswers(Number(target.dataset.questionId));
+    }
+    if (action === "submit-answer") {
+      openAnswerModal(Number(target.dataset.questionId));
     }
     if (action === "like-answer") {
-      likeAnswer(Number(event.target.dataset.answerId), Number(event.target.dataset.questionId));
+      likeAnswer(Number(target.dataset.answerId), Number(target.dataset.questionId));
     }
     if (action === "load-comments") {
-      loadComments(Number(event.target.dataset.answerId));
+      loadComments(Number(target.dataset.answerId));
+    }
+    if (action === "add-comment") {
+      openCommentModal(Number(target.dataset.answerId), Number(target.dataset.questionId));
     }
   });
 
-  document.getElementById("questionsList")?.addEventListener("submit", event => {
-    if (event.target.classList.contains("answer-form")) {
-      submitAnswer(event);
-    }
-    if (event.target.classList.contains("comment-form")) {
-      submitComment(event);
+  document.getElementById("usersList")?.addEventListener("click", event => {
+    const target = event.target.closest("[data-action]");
+    if (target?.dataset.action === "select-user") {
+      selectChatUser(Number(target.dataset.userId));
     }
   });
 }
@@ -71,10 +79,29 @@ async function ensureCurrentUserId() {
   return id;
 }
 
-async function createQuestion(event) {
+function openQuestionModal() {
+  openModal({
+    title: "Ask a question",
+    eyebrow: "New thread",
+    submitText: "Submit for Approval",
+    body: `
+      <form id="questionModalForm" class="form-stack">
+        <label for="modalQuestionTitle">Title</label>
+        <input id="modalQuestionTitle" name="title" placeholder="Example: How does JWT validation work?" required />
+        <label for="modalQuestionTopic">Topic</label>
+        <input id="modalQuestionTopic" name="topic" placeholder="Java, Spring Boot, SQL..." required />
+        <label for="modalQuestionDescription">Description</label>
+        <textarea id="modalQuestionDescription" name="description" placeholder="Describe your issue clearly for other users." required></textarea>
+      </form>
+    `,
+    onSubmit: createQuestion
+  });
+}
+
+async function createQuestion(event, modal) {
   event.preventDefault();
-  const button = document.getElementById("askQuestionBtn");
-  setButtonBusy(button, true, "Submitting...");
+  const form = event.target;
+  modal?.setBusy(true, "Submitting...");
 
   try {
     const userId = await ensureCurrentUserId();
@@ -82,20 +109,22 @@ async function createQuestion(event) {
       method: "POST",
       headers: getAuthHeaders("USER"),
       body: JSON.stringify({
-        title: document.getElementById("questionTitle").value.trim(),
-        description: document.getElementById("questionDescription").value.trim(),
-        topic: document.getElementById("questionTopic").value.trim(),
+        title: form.elements.title.value.trim(),
+        description: form.elements.description.value.trim(),
+        topic: form.elements.topic.value.trim(),
         userId
       })
     });
 
-    event.target.reset();
+    form.reset();
+    modal?.setBusy(false);
+    modal?.close();
     showToast(`Question submitted for admin approval. ID: ${data.id}`);
     await loadQuestions();
   } catch (error) {
     showToast(error.message, "error");
   } finally {
-    setButtonBusy(button, false);
+    modal?.setBusy(false);
   }
 }
 
@@ -109,6 +138,7 @@ async function loadQuestions(keyword = "") {
     });
 
     updateStat("questionCount", questions?.length || 0);
+    updateStat("sideQuestionCount", questions?.length || 0);
     renderCards("questionsList", questions, renderQuestionCard, "No approved questions are available yet.");
   } catch (error) {
     showToast(error.message, "error");
@@ -122,36 +152,55 @@ function searchQuestions() {
 
 function renderQuestionCard(question) {
   const id = Number(question.id);
+  const answerCount = Number(question.answerCount || question.answersCount || question.totalAnswers || 0);
   return `
-    <article class="thread-card">
-      <div class="card-topline">
-        <span class="topic-chip">${escapeHtml(question.topic)}</span>
-        ${statusBadge(question)}
+    <article class="question-row">
+      <div class="question-stats">
+        <div><strong>${answerCount}</strong><span>answers</span></div>
+        <div class="${question.resolved ? "resolved-count" : ""}"><strong>${question.resolved ? "Yes" : "No"}</strong><span>resolved</span></div>
       </div>
-      <h3>#${id} ${escapeHtml(question.title)}</h3>
-      <p>${escapeHtml(question.description)}</p>
-      <div class="meta">
-        <span>User #${escapeHtml(question.userId)}</span>
-        <span>${question.resolved ? "Closed thread" : "Active thread"}</span>
+      <div class="question-summary">
+        <div class="question-title-row">
+          <h3>#${id} ${escapeHtml(question.title)}</h3>
+          ${statusBadge(question)}
+        </div>
+        <p>${escapeHtml(question.description)}</p>
+        <div class="question-tags">
+          <span class="topic-chip">${escapeHtml(question.topic)}</span>
+          <span>User #${escapeHtml(question.userId)}</span>
+          <span>${question.resolved ? "Closed thread" : "Active thread"}</span>
+        </div>
+        <div class="card-actions compact-actions">
+          <button class="secondary-btn" data-action="load-answers" data-question-id="${id}">View Answers</button>
+          <button data-action="submit-answer" data-question-id="${id}">Submit Answer</button>
+        </div>
+        <div id="answers-${id}" class="answers-region"></div>
       </div>
-      <div class="card-actions">
-        <button class="secondary-btn" data-action="load-answers" data-question-id="${id}">View Answers</button>
-      </div>
-      <form class="answer-form inline-composer" data-question-id="${id}">
-        <textarea name="content" placeholder="Write an answer for this question" required></textarea>
-        <button type="submit">Submit Answer</button>
-      </form>
-      <div id="answers-${id}" class="answers-region"></div>
     </article>
   `;
 }
 
-async function submitAnswer(event) {
+function openAnswerModal(questionId) {
+  if (!questionId) return;
+  openModal({
+    title: `Answer question #${questionId}`,
+    eyebrow: "New answer",
+    submitText: "Submit Answer",
+    body: `
+      <form class="form-stack" data-question-id="${questionId}">
+        <label for="modalAnswerContent">Answer</label>
+        <textarea id="modalAnswerContent" name="content" placeholder="Write a helpful answer for this question" required></textarea>
+      </form>
+    `,
+    onSubmit: submitAnswer
+  });
+}
+
+async function submitAnswer(event, modal) {
   event.preventDefault();
   const form = event.target;
   const questionId = Number(form.dataset.questionId);
-  const button = form.querySelector("button");
-  setButtonBusy(button, true, "Posting...");
+  modal?.setBusy(true, "Posting...");
 
   try {
     const userId = await ensureCurrentUserId();
@@ -166,12 +215,14 @@ async function submitAnswer(event) {
     });
 
     form.reset();
+    modal?.setBusy(false);
+    modal?.close();
     showToast(`Answer submitted for admin approval. ID: ${data.id}`);
     await loadAnswers(questionId);
   } catch (error) {
     showToast(error.message, "error");
   } finally {
-    setButtonBusy(button, false);
+    modal?.setBusy(false);
   }
 }
 
@@ -197,6 +248,7 @@ async function loadAnswers(questionId) {
     }));
 
     updateStat("answerCount", answersWithLikes.length);
+    updateStat("sideAnswerCount", answersWithLikes.length);
 
     if (!answersWithLikes.length) {
       container.innerHTML = `<div class="empty-state">No approved answers yet.</div>`;
@@ -225,11 +277,8 @@ function renderAnswerCard(answer, questionId) {
       <div class="card-actions">
         <button class="secondary-btn" data-action="like-answer" data-answer-id="${id}" data-question-id="${questionId}">Like</button>
         <button class="secondary-btn" data-action="load-comments" data-answer-id="${id}">Show Comments</button>
+        <button data-action="add-comment" data-answer-id="${id}" data-question-id="${questionId}">Add Comment</button>
       </div>
-      <form class="comment-form inline-composer compact" data-answer-id="${id}" data-question-id="${questionId}">
-        <input name="comment" placeholder="Add a comment" required />
-        <button type="submit">Comment</button>
-      </form>
       <div id="comments-${id}" class="comments-region"></div>
     </article>
   `;
@@ -250,12 +299,27 @@ async function likeAnswer(answerId, questionId) {
   }
 }
 
-async function submitComment(event) {
+function openCommentModal(answerId, questionId) {
+  if (!answerId) return;
+  openModal({
+    title: `Comment on answer #${answerId}`,
+    eyebrow: "New comment",
+    submitText: "Add Comment",
+    body: `
+      <form class="form-stack" data-answer-id="${answerId}" data-question-id="${questionId}">
+        <label for="modalCommentText">Comment</label>
+        <textarea id="modalCommentText" name="comment" placeholder="Add a clear, useful comment" required></textarea>
+      </form>
+    `,
+    onSubmit: submitComment
+  });
+}
+
+async function submitComment(event, modal) {
   event.preventDefault();
   const form = event.target;
   const answerId = Number(form.dataset.answerId);
-  const button = form.querySelector("button");
-  setButtonBusy(button, true, "Adding...");
+  modal?.setBusy(true, "Adding...");
 
   try {
     const userId = await ensureCurrentUserId();
@@ -269,12 +333,14 @@ async function submitComment(event) {
       })
     });
     form.reset();
+    modal?.setBusy(false);
+    modal?.close();
     showToast("Comment added.");
     await loadComments(answerId);
   } catch (error) {
     showToast(error.message, "error");
   } finally {
-    setButtonBusy(button, false);
+    modal?.setBusy(false);
   }
 }
 
@@ -310,44 +376,139 @@ async function loadUsers() {
       headers: getAuthHeaders("USER")
     });
 
+    userDirectory = users || [];
     updateStat("peopleCount", users?.length || 0);
-    renderCards("usersList", users, user => `
-      <article class="mini-card">
-        <strong>#${escapeHtml(user.id)} ${accountLabel(user, "User")}</strong>
-        <span>${escapeHtml(user.email)} - ${getStatusLabel(user)}</span>
-      </article>
-    `, "No users available.");
+    renderUserContacts();
   } catch (error) {
     showToast(error.message, "error");
   }
 }
 
-async function sendMessage(event) {
+function renderUserContacts() {
+  const keyword = document.getElementById("contactSearch")?.value.trim().toLowerCase() || "";
+  const currentUserId = getCurrentId("USER");
+  const users = userDirectory.filter(user => {
+    const isSelf = Number(user.id) === Number(currentUserId);
+    const haystack = `${safe(user.id)} ${safe(user.name)} ${safe(user.email)} ${safe(user.role)}`.toLowerCase();
+    return !isSelf && (!keyword || haystack.includes(keyword));
+  });
+
+  renderCards("usersList", users, renderContactButton, "No users match your search.");
+}
+
+function renderContactButton(user) {
+  const id = Number(user.id);
+  const initial = escapeHtml((user.name || user.email || "U").slice(0, 1).toUpperCase());
+  return `
+    <button type="button" class="contact-item ${Number(selectedChatUserId) === id ? "active" : ""}" data-action="select-user" data-user-id="${id}">
+      <span class="contact-avatar">${initial}</span>
+      <span>
+        <strong>#${id} ${accountLabel(user, "User")}</strong>
+        <small>${escapeHtml(user.email)} - ${getStatusLabel(user)}</small>
+      </span>
+    </button>
+  `;
+}
+
+function openMessageModal(receiverId = "") {
+  openModal({
+    title: "Send message",
+    eyebrow: "Conversation",
+    submitText: "Send Message",
+    body: `
+      <form class="form-stack">
+        <label for="modalReceiverId">Receiver User ID</label>
+        <input id="modalReceiverId" name="receiverId" type="number" min="1" value="${escapeHtml(receiverId)}" placeholder="Enter receiver user ID" required />
+        <label for="modalChatMessage">Message</label>
+        <textarea id="modalChatMessage" name="message" placeholder="Write your message" required></textarea>
+      </form>
+    `,
+    onSubmit: sendMessage
+  });
+}
+
+async function sendMessage(event, modal) {
   event.preventDefault();
-  const button = document.getElementById("sendMessageBtn");
-  setButtonBusy(button, true, "Sending...");
+  const form = event.target;
+  modal?.setBusy(true, "Sending...");
 
   try {
-    const senderId = await ensureCurrentUserId();
-    const receiverId = Number(document.getElementById("receiverId").value);
-    await apiRequest("/api/chats", {
-      method: "POST",
-      headers: getAuthHeaders("USER"),
-      body: JSON.stringify({
-        senderId,
-        receiverId,
-        message: document.getElementById("chatMessage").value.trim()
-      })
-    });
+    const receiverId = Number(form.elements.receiverId.value);
+    await createChatMessage(receiverId, form.elements.message.value.trim());
 
-    event.target.reset();
+    form.reset();
+    modal?.setBusy(false);
+    modal?.close();
     document.getElementById("conversationUserId").value = receiverId;
     showToast("Message sent.");
     await loadConversation(receiverId);
   } catch (error) {
     showToast(error.message, "error");
   } finally {
+    modal?.setBusy(false);
+  }
+}
+
+async function selectChatUser(userId) {
+  selectedChatUserId = Number(userId);
+  document.getElementById("conversationUserId").value = selectedChatUserId;
+  updateConversationHeader();
+  updateComposerState();
+  renderUserContacts();
+  await loadConversation(selectedChatUserId);
+}
+
+function updateConversationHeader() {
+  const selectedUser = userDirectory.find(user => Number(user.id) === Number(selectedChatUserId));
+  const title = selectedUser
+    ? `#${selectedUser.id} ${selectedUser.name || selectedUser.email || "User"}`
+    : "Choose a user";
+  setText("conversationTitle", title);
+}
+
+function updateComposerState() {
+  const input = document.getElementById("chatComposerInput");
+  const button = document.getElementById("sendSelectedMessageBtn");
+  const disabled = !selectedChatUserId;
+  if (input) input.disabled = disabled;
+  if (button) button.disabled = disabled;
+}
+
+async function createChatMessage(receiverId, message) {
+  const senderId = await ensureCurrentUserId();
+  await apiRequest("/api/chats", {
+    method: "POST",
+    headers: getAuthHeaders("USER"),
+    body: JSON.stringify({
+      senderId,
+      receiverId,
+      message
+    })
+  });
+}
+
+async function sendSelectedMessage(event) {
+  event.preventDefault();
+  if (!selectedChatUserId) {
+    showToast("Choose a user before sending a message.", "warning");
+    return;
+  }
+
+  const form = event.target;
+  const input = form.elements.message;
+  const button = document.getElementById("sendSelectedMessageBtn");
+  setButtonBusy(button, true, "Sending...");
+
+  try {
+    await createChatMessage(Number(selectedChatUserId), input.value.trim());
+    form.reset();
+    showToast("Message sent.");
+    await loadConversation(selectedChatUserId);
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
     setButtonBusy(button, false);
+    updateComposerState();
   }
 }
 
@@ -356,6 +517,11 @@ async function loadConversation(preselectedUserId) {
     const userOneId = await ensureCurrentUserId();
     const userTwoId = Number(preselectedUserId || document.getElementById("conversationUserId").value);
     if (!userTwoId) throw new Error("Enter another user ID to load a conversation.");
+    selectedChatUserId = userTwoId;
+    document.getElementById("conversationUserId").value = userTwoId;
+    updateConversationHeader();
+    updateComposerState();
+    renderUserContacts();
 
     const messages = await apiRequest(`/api/chats/conversation?userOneId=${userOneId}&userTwoId=${userTwoId}`, {
       headers: getAuthHeaders("USER")
@@ -364,7 +530,7 @@ async function loadConversation(preselectedUserId) {
     renderCards("chatList", messages, message => `
       <article class="chat-bubble ${Number(message.senderId) === Number(userOneId) ? "mine" : ""}">
         <div class="meta">
-          <span>${escapeHtml(message.senderId)} to ${escapeHtml(message.receiverId)}</span>
+          <span>${Number(message.senderId) === Number(userOneId) ? "You" : `User #${escapeHtml(message.senderId)}`}</span>
           <span>${formatDate(message.createdAt)}</span>
         </div>
         <p>${escapeHtml(message.message)}</p>
@@ -403,7 +569,9 @@ async function loadAnswerStats() {
       headers: getAuthHeaders("USER")
     });
     updateStat("answerCount", answers?.length || 0);
+    updateStat("sideAnswerCount", answers?.length || 0);
   } catch {
     updateStat("answerCount", 0);
+    updateStat("sideAnswerCount", 0);
   }
 }

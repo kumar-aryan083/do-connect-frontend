@@ -6,6 +6,43 @@ const adminStats = {
   answers: []
 };
 
+const adminResourceState = {
+  users: { loaded: false, loading: false, error: null },
+  admins: { loaded: false, loading: false, error: null },
+  questions: { loaded: false, loading: false, error: null },
+  answers: { loaded: false, loading: false, error: null }
+};
+
+const adminResourceConfig = {
+  users: { path: "/api/users", renderer: renderFilteredUsers },
+  admins: { path: "/api/admins", renderer: renderFilteredAdmins },
+  questions: { path: "/api/questions/all", renderer: renderFilteredQuestions },
+  answers: { path: "/api/answers/all", renderer: renderFilteredAnswers }
+};
+
+const adminFilterConfig = {
+  questions: {
+    searchId: "questionAdminSearch",
+    statusId: "questionStatusFilter",
+    fields: ["id", "title", "topic", "description", "userId"]
+  },
+  answers: {
+    searchId: "answerAdminSearch",
+    statusId: "answerStatusFilter",
+    fields: ["id", "content", "questionId", "userId"]
+  },
+  users: {
+    searchId: "userAdminSearch",
+    statusId: "userStatusFilter",
+    fields: ["id", "name", "email", "role"]
+  },
+  admins: {
+    searchId: "adminAdminSearch",
+    statusId: "adminStatusFilter",
+    fields: ["id", "name", "email", "role"]
+  }
+};
+
 if (adminSession) {
   setupNavigation();
   bootAdminDashboard();
@@ -16,11 +53,12 @@ async function bootAdminDashboard() {
   bindAdminEvents();
 
   try {
-    await resolveCurrentAccount("ADMIN", true);
+    await resolveCurrentAccount("ADMIN");
   } catch {
     showToast("Admin profile ID could not be resolved yet.", "warning");
   }
 
+  renderOverview();
   await loadOverview();
 }
 
@@ -44,39 +82,150 @@ function bindAdminEvents() {
   document.getElementById("adminsList")?.addEventListener("click", handleAdminClick);
   document.getElementById("commentsList")?.addEventListener("click", handleCommentClick);
 
-  document.getElementById("questionsList")?.addEventListener("submit", updateQuestion);
-  document.getElementById("answersList")?.addEventListener("submit", updateAnswer);
-  document.getElementById("usersList")?.addEventListener("submit", updateUser);
-  document.getElementById("adminsList")?.addEventListener("submit", updateAdmin);
+  bindAdminFilter("questions", renderFilteredQuestions);
+  bindAdminFilter("answers", renderFilteredAnswers);
+  bindAdminFilter("users", renderFilteredUsers);
+  bindAdminFilter("admins", renderFilteredAdmins);
+
+  document.querySelectorAll(".admin-shell .nav-btn").forEach(button => {
+    button.addEventListener("click", () => handleAdminSectionOpen(button.dataset.section));
+  });
 }
 
 async function loadOverview() {
-  try {
-    const [users, admins, questions, answers] = await Promise.all([
-      apiRequest("/api/users", { headers: getAuthHeaders("ADMIN") }),
-      apiRequest("/api/admins", { headers: getAuthHeaders("ADMIN") }),
-      apiRequest("/api/questions/all", { headers: getAuthHeaders("ADMIN") }),
-      apiRequest("/api/answers/all", { headers: getAuthHeaders("ADMIN") })
-    ]);
+  await refreshAdminData(["admins", "questions", "answers", "users"]);
+  renderOverview();
+}
 
-    updateAdminStats({ users, admins, questions, answers });
-    renderOverview({ users, admins, questions, answers });
+async function refreshAdminData(resources) {
+  await Promise.all(resources.map(resource => refreshAdminResource(resource)));
+  renderOverview();
+}
+
+async function refreshAdminResource(resource) {
+  const config = adminResourceConfig[resource];
+  const state = adminResourceState[resource];
+  if (!config || !state) return [];
+
+  state.loading = true;
+  state.error = null;
+  renderAdminResource(resource);
+
+  try {
+    const data = await apiRequest(config.path, {
+      headers: getAuthHeaders("ADMIN")
+    });
+    adminStats[resource] = Array.isArray(data) ? data : [];
+    state.loaded = true;
+    state.loading = false;
+    state.error = null;
   } catch (error) {
-    showToast(error.message, "error");
+    adminStats[resource] = [];
+    state.loaded = true;
+    state.loading = false;
+    state.error = error;
+
+    if (!isExpectedAdminPermissionError(resource, error)) {
+      showToast(error.message, "error");
+    }
   }
+
+  updateAdminStats();
+  renderAdminResource(resource);
+  return adminStats[resource];
+}
+
+function renderAdminResource(resource) {
+  adminResourceConfig[resource]?.renderer?.();
+}
+
+function handleAdminSectionOpen(sectionId) {
+  const resourceBySection = {
+    questionsSection: "questions",
+    answersSection: "answers",
+    usersSection: "users",
+    adminsSection: "admins"
+  };
+  const resource = resourceBySection[sectionId];
+  if (!resource) return;
+
+  renderAdminResource(resource);
+  if (!adminResourceState[resource]?.loaded) {
+    refreshAdminResource(resource).then(() => renderOverview());
+  }
+}
+
+function isExpectedAdminPermissionError(resource, error) {
+  return resource === "users" && (error?.status === 403 || safe(error?.message).includes("403"));
 }
 
 function updateAdminStats(partial = {}) {
   Object.assign(adminStats, partial);
-  updateStat("totalUsers", adminStats.users.length);
+  updateStat("totalUsers", adminResourceState.users.error ? "--" : adminStats.users.length);
   updateStat("totalAdmins", adminStats.admins.length);
   updateStat("pendingQuestions", adminStats.questions.filter(item => item.approved === false && item.active !== false).length);
   updateStat("pendingAnswers", adminStats.answers.filter(item => item.approved === false && item.active !== false).length);
 }
 
-function renderOverview({ questions = [], answers = [] }) {
+function renderAdminListState(containerId, resource, loadingText, unavailableText) {
+  const container = document.getElementById(containerId);
+  const state = adminResourceState[resource];
+  if (!container || !state) return false;
+
+  if (state.loading) {
+    container.innerHTML = `<div class="empty-state">${escapeHtml(loadingText)}</div>`;
+    return true;
+  }
+
+  if (state.error) {
+    const isPermission = isExpectedAdminPermissionError(resource, state.error);
+    container.innerHTML = `<div class="empty-state ${isPermission ? "" : "error-text"}">${escapeHtml(isPermission ? unavailableText : state.error.message)}</div>`;
+    return true;
+  }
+
+  return false;
+}
+
+function bindAdminFilter(key, renderer) {
+  const config = adminFilterConfig[key];
+  if (!config) return;
+
+  document.getElementById(config.searchId)?.addEventListener("input", renderer);
+  document.getElementById(config.statusId)?.addEventListener("change", renderer);
+}
+
+function getFilteredRecords(key, records) {
+  const config = adminFilterConfig[key];
+  if (!config) return records || [];
+
+  const keyword = document.getElementById(config.searchId)?.value.trim().toLowerCase() || "";
+  const status = document.getElementById(config.statusId)?.value || "all";
+
+  return (records || []).filter(item => {
+    return matchesAdminSearch(item, config.fields, keyword) && matchesAdminStatus(item, status);
+  });
+}
+
+function matchesAdminSearch(item, fields, keyword) {
+  if (!keyword) return true;
+  return fields.some(field => safe(item?.[field]).toLowerCase().includes(keyword));
+}
+
+function matchesAdminStatus(item, status) {
+  if (status === "all") return true;
+  if (status === "inactive") return item?.active === false;
+  if (status === "active") return item?.active !== false;
+  if (status === "pending") return item?.approved === false && item?.active !== false;
+  if (status === "approved") return item?.approved === true && item?.resolved !== true && item?.active !== false;
+  if (status === "resolved") return item?.resolved === true && item?.active !== false;
+  return true;
+}
+
+function renderOverview() {
+  const { questions = [], answers = [] } = adminStats;
   const pendingQuestions = questions.filter(item => item.approved === false && item.active !== false).slice(0, 5);
   const pendingAnswers = answers.filter(item => item.approved === false && item.active !== false).slice(0, 5);
+  const userState = adminResourceState.users;
 
   document.getElementById("overviewList").innerHTML = `
     <article class="panel-card">
@@ -97,19 +246,28 @@ function renderOverview({ questions = [], answers = [] }) {
         </div>
       `).join("") : `<div class="empty-state">No pending answers.</div>`}
     </article>
+    ${userState.error ? `
+      <article class="panel-card">
+        <h3>User Directory</h3>
+        <div class="empty-state">User list is unavailable for this admin token. Other moderation data is still loaded.</div>
+      </article>
+    ` : ""}
   `;
 }
 
 async function loadQuestions() {
-  try {
-    const questions = await apiRequest("/api/questions/all", {
-      headers: getAuthHeaders("ADMIN")
-    });
-    renderCards("questionsList", questions, renderQuestionModerationCard, "No questions found.");
-    updateAdminStats({ questions });
-  } catch (error) {
-    showToast(error.message, "error");
-  }
+  await refreshAdminResource("questions");
+  renderOverview();
+}
+
+function renderFilteredQuestions() {
+  if (renderAdminListState("questionsList", "questions", "Loading questions...", "Questions are unavailable.")) return;
+  renderCards(
+    "questionsList",
+    getFilteredRecords("questions", adminStats.questions),
+    renderQuestionModerationCard,
+    "No questions match the current filters."
+  );
 }
 
 function renderQuestionModerationCard(question) {
@@ -131,24 +289,17 @@ function renderQuestionModerationCard(question) {
         <button data-action="approve-question" data-id="${id}" class="success-btn">Approve</button>
         <button data-action="reject-question" data-id="${id}" class="secondary-btn">Reject</button>
         <button data-action="resolve-question" data-id="${id}" class="secondary-btn">Resolve</button>
+        <button data-action="edit-question" data-id="${id}" class="secondary-btn">Edit</button>
         <button data-action="delete-question" data-id="${id}" class="danger ghost-btn">Deactivate</button>
       </div>
-      <details class="edit-box">
-        <summary>Edit question</summary>
-        <form class="question-edit-form form-stack" data-id="${id}" data-user-id="${escapeHtml(question.userId)}">
-          <input name="title" value="${escapeHtml(question.title)}" placeholder="Title" required />
-          <input name="topic" value="${escapeHtml(question.topic)}" placeholder="Topic" required />
-          <textarea name="description" required>${escapeHtml(question.description)}</textarea>
-          <button type="submit" class="admin-tone">Save Question</button>
-        </form>
-      </details>
     </article>
   `;
 }
 
 async function handleQuestionClick(event) {
-  const action = event.target.dataset.action;
-  const id = Number(event.target.dataset.id);
+  const target = event.target.closest("[data-action]");
+  const action = target?.dataset.action;
+  const id = Number(target?.dataset.id);
   if (!action || !id) return;
 
   const paths = {
@@ -158,38 +309,98 @@ async function handleQuestionClick(event) {
     "delete-question": { method: "DELETE", path: `/api/questions/${id}`, message: "Question deactivated." }
   };
 
+  if (action === "edit-question") {
+    openQuestionEditModal(adminStats.questions.find(question => Number(question.id) === id));
+    return;
+  }
+
+  if (action === "delete-question") {
+    confirmAdminAction({
+      title: `Deactivate question #${id}`,
+      message: "Deactivate this question and hide it from active workspaces?",
+      config: paths[action],
+      reload: loadQuestions
+    });
+    return;
+  }
+
+  if (action === "reject-question" || action === "resolve-question") {
+    confirmAdminAction({
+      title: action === "reject-question" ? `Reject question #${id}` : `Resolve question #${id}`,
+      message: action === "reject-question"
+        ? "Reject this question from the moderation queue?"
+        : "Mark this question as resolved?",
+      config: paths[action],
+      reload: loadQuestions,
+      danger: false,
+      confirmText: action === "reject-question" ? "Reject Question" : "Mark Resolved"
+    });
+    return;
+  }
+
   await runAdminAction(paths[action], loadQuestions);
 }
 
-async function updateQuestion(event) {
-  if (!event.target.classList.contains("question-edit-form")) return;
+function openQuestionEditModal(question) {
+  if (!question) return;
+  const id = Number(question.id);
+  openModal({
+    title: `Edit question #${id}`,
+    eyebrow: "Question CRUD",
+    tone: "admin",
+    submitText: "Save Question",
+    body: `
+      <form class="form-stack" data-id="${id}" data-user-id="${escapeHtml(question.userId)}">
+        <label for="modalQuestionTitle">Title</label>
+        <input id="modalQuestionTitle" name="title" value="${escapeHtml(question.title)}" placeholder="Title" required />
+        <label for="modalQuestionTopic">Topic</label>
+        <input id="modalQuestionTopic" name="topic" value="${escapeHtml(question.topic)}" placeholder="Topic" required />
+        <label for="modalQuestionDescription">Description</label>
+        <textarea id="modalQuestionDescription" name="description" required>${escapeHtml(question.description)}</textarea>
+      </form>
+    `,
+    onSubmit: updateQuestion
+  });
+}
+
+async function updateQuestion(event, modal) {
   event.preventDefault();
 
   const form = event.target;
   const id = Number(form.dataset.id);
-  await runAdminAction({
-    method: "PUT",
-    path: `/api/questions/${id}`,
-    body: {
-      title: form.elements.title.value.trim(),
-      topic: form.elements.topic.value.trim(),
-      description: form.elements.description.value.trim(),
-      userId: Number(form.dataset.userId)
-    },
-    message: "Question updated."
-  }, loadQuestions);
+  modal?.setBusy(true, "Saving...");
+  try {
+    await runAdminAction({
+      method: "PUT",
+      path: `/api/questions/${id}`,
+      body: {
+        title: form.elements.title.value.trim(),
+        topic: form.elements.topic.value.trim(),
+        description: form.elements.description.value.trim(),
+        userId: Number(form.dataset.userId)
+      },
+      message: "Question updated."
+    }, loadQuestions, { throwOnError: true });
+    modal?.setBusy(false);
+    modal?.close();
+  } catch {
+    modal?.setBusy(false);
+  }
 }
 
 async function loadAnswers() {
-  try {
-    const answers = await apiRequest("/api/answers/all", {
-      headers: getAuthHeaders("ADMIN")
-    });
-    renderCards("answersList", answers, renderAnswerModerationCard, "No answers found.");
-    updateAdminStats({ answers });
-  } catch (error) {
-    showToast(error.message, "error");
-  }
+  await refreshAdminResource("answers");
+  renderOverview();
+}
+
+function renderFilteredAnswers() {
+  if (renderAdminListState("answersList", "answers", "Loading answers...", "Answers are unavailable.")) return;
+  renderCards(
+    "answersList",
+    getFilteredRecords("answers", adminStats.answers),
+    renderAnswerModerationCard,
+    "No answers match the current filters."
+  );
 }
 
 function renderAnswerModerationCard(answer) {
@@ -209,22 +420,17 @@ function renderAnswerModerationCard(answer) {
       <div class="card-actions">
         <button data-action="approve-answer" data-id="${id}" class="success-btn">Approve</button>
         <button data-action="reject-answer" data-id="${id}" class="secondary-btn">Reject</button>
+        <button data-action="edit-answer" data-id="${id}" class="secondary-btn">Edit</button>
         <button data-action="delete-answer" data-id="${id}" class="danger ghost-btn">Deactivate</button>
       </div>
-      <details class="edit-box">
-        <summary>Edit answer</summary>
-        <form class="answer-edit-form form-stack" data-id="${id}" data-question-id="${escapeHtml(answer.questionId)}" data-user-id="${escapeHtml(answer.userId)}">
-          <textarea name="content" required>${escapeHtml(answer.content)}</textarea>
-          <button type="submit" class="admin-tone">Save Answer</button>
-        </form>
-      </details>
     </article>
   `;
 }
 
 async function handleAnswerClick(event) {
-  const action = event.target.dataset.action;
-  const id = Number(event.target.dataset.id);
+  const target = event.target.closest("[data-action]");
+  const action = target?.dataset.action;
+  const id = Number(target?.dataset.id);
   if (!action || !id) return;
 
   const paths = {
@@ -233,49 +439,106 @@ async function handleAnswerClick(event) {
     "delete-answer": { method: "DELETE", path: `/api/answers/${id}`, message: "Answer deactivated." }
   };
 
+  if (action === "edit-answer") {
+    openAnswerEditModal(adminStats.answers.find(answer => Number(answer.id) === id));
+    return;
+  }
+
+  if (action === "delete-answer") {
+    confirmAdminAction({
+      title: `Deactivate answer #${id}`,
+      message: "Deactivate this answer and hide it from active answer lists?",
+      config: paths[action],
+      reload: loadAnswers
+    });
+    return;
+  }
+
+  if (action === "reject-answer") {
+    confirmAdminAction({
+      title: `Reject answer #${id}`,
+      message: "Reject this answer from the moderation queue?",
+      config: paths[action],
+      reload: loadAnswers,
+      danger: false,
+      confirmText: "Reject Answer"
+    });
+    return;
+  }
+
   await runAdminAction(paths[action], loadAnswers);
 }
 
-async function updateAnswer(event) {
-  if (!event.target.classList.contains("answer-edit-form")) return;
+function openAnswerEditModal(answer) {
+  if (!answer) return;
+  const id = Number(answer.id);
+  openModal({
+    title: `Edit answer #${id}`,
+    eyebrow: "Answer moderation",
+    tone: "admin",
+    submitText: "Save Answer",
+    body: `
+      <form class="form-stack" data-id="${id}" data-question-id="${escapeHtml(answer.questionId)}" data-user-id="${escapeHtml(answer.userId)}">
+        <label for="modalAnswerContent">Answer</label>
+        <textarea id="modalAnswerContent" name="content" required>${escapeHtml(answer.content)}</textarea>
+      </form>
+    `,
+    onSubmit: updateAnswer
+  });
+}
+
+async function updateAnswer(event, modal) {
   event.preventDefault();
 
   const form = event.target;
   const id = Number(form.dataset.id);
-  await runAdminAction({
-    method: "PUT",
-    path: `/api/answers/${id}`,
-    body: {
-      questionId: Number(form.dataset.questionId),
-      userId: Number(form.dataset.userId),
-      content: form.elements.content.value.trim()
-    },
-    message: "Answer updated."
-  }, loadAnswers);
+  modal?.setBusy(true, "Saving...");
+  try {
+    await runAdminAction({
+      method: "PUT",
+      path: `/api/answers/${id}`,
+      body: {
+        questionId: Number(form.dataset.questionId),
+        userId: Number(form.dataset.userId),
+        content: form.elements.content.value.trim()
+      },
+      message: "Answer updated."
+    }, loadAnswers, { throwOnError: true });
+    modal?.setBusy(false);
+    modal?.close();
+  } catch {
+    modal?.setBusy(false);
+  }
 }
 
 async function loadUsers() {
-  try {
-    const users = await apiRequest("/api/users", {
-      headers: getAuthHeaders("ADMIN")
-    });
-    renderCards("usersList", users, user => renderAccountCard(user, "user"), "No users found.");
-    updateAdminStats({ users });
-  } catch (error) {
-    showToast(error.message, "error");
-  }
+  await refreshAdminResource("users");
+  renderOverview();
 }
 
 async function loadAdmins() {
-  try {
-    const admins = await apiRequest("/api/admins", {
-      headers: getAuthHeaders("ADMIN")
-    });
-    renderCards("adminsList", admins, admin => renderAccountCard(admin, "admin"), "No admins found.");
-    updateAdminStats({ admins });
-  } catch (error) {
-    showToast(error.message, "error");
-  }
+  await refreshAdminResource("admins");
+  renderOverview();
+}
+
+function renderFilteredUsers() {
+  if (renderAdminListState("usersList", "users", "Loading users...", "User list is not available for this admin account.")) return;
+  renderCards(
+    "usersList",
+    getFilteredRecords("users", adminStats.users),
+    user => renderAccountCard(user, "user"),
+    "No users match the current filters."
+  );
+}
+
+function renderFilteredAdmins() {
+  if (renderAdminListState("adminsList", "admins", "Loading admins...", "Admins are unavailable.")) return;
+  renderCards(
+    "adminsList",
+    getFilteredRecords("admins", adminStats.admins),
+    admin => renderAccountCard(admin, "admin"),
+    "No admins match the current filters."
+  );
 }
 
 function renderAccountCard(account, type) {
@@ -293,67 +556,108 @@ function renderAccountCard(account, type) {
         <span>Created: ${formatDate(account.createdAt)}</span>
       </div>
       <div class="card-actions">
+        <button data-action="edit-${type}" data-id="${id}" class="secondary-btn">Edit</button>
         <button data-action="delete-${type}" data-id="${id}" class="danger ghost-btn">Deactivate</button>
       </div>
-      <details class="edit-box">
-        <summary>Edit ${isAdmin ? "admin" : "user"}</summary>
-        <form class="${type}-edit-form form-stack" data-id="${id}">
-          <input name="name" value="${escapeHtml(account.name)}" placeholder="Name" required />
-          <input name="email" type="email" value="${escapeHtml(account.email)}" placeholder="Email" required />
-          <input name="password" type="password" placeholder="New password required by API" required minlength="6" />
-          <button type="submit" class="admin-tone">Save ${isAdmin ? "Admin" : "User"}</button>
-        </form>
-      </details>
     </article>
   `;
 }
 
 async function handleUserClick(event) {
-  if (event.target.dataset.action !== "delete-user") return;
-  const id = Number(event.target.dataset.id);
-  await runAdminAction({
-    method: "DELETE",
-    path: `/api/users/${id}`,
-    message: "User deactivated."
-  }, loadUsers);
+  const target = event.target.closest("[data-action]");
+  const action = target?.dataset.action;
+  const id = Number(target?.dataset.id);
+  if (!action || !id) return;
+
+  if (action === "edit-user") {
+    openAccountEditModal(adminStats.users.find(user => Number(user.id) === id), "user");
+    return;
+  }
+
+  if (action === "delete-user") {
+    confirmAdminAction({
+      title: `Deactivate user #${id}`,
+      message: "Deactivate this user account?",
+      config: {
+        method: "DELETE",
+        path: `/api/users/${id}`,
+        message: "User deactivated."
+      },
+      reload: loadUsers
+    });
+  }
 }
 
 async function handleAdminClick(event) {
-  if (event.target.dataset.action !== "delete-admin") return;
-  const id = Number(event.target.dataset.id);
-  await runAdminAction({
-    method: "DELETE",
-    path: `/api/admins/${id}`,
-    message: "Admin deactivated."
-  }, loadAdmins);
+  const target = event.target.closest("[data-action]");
+  const action = target?.dataset.action;
+  const id = Number(target?.dataset.id);
+  if (!action || !id) return;
+
+  if (action === "edit-admin") {
+    openAccountEditModal(adminStats.admins.find(admin => Number(admin.id) === id), "admin");
+    return;
+  }
+
+  if (action === "delete-admin") {
+    confirmAdminAction({
+      title: `Deactivate admin #${id}`,
+      message: "Deactivate this admin account?",
+      config: {
+        method: "DELETE",
+        path: `/api/admins/${id}`,
+        message: "Admin deactivated."
+      },
+      reload: loadAdmins
+    });
+  }
 }
 
-async function updateUser(event) {
-  if (!event.target.classList.contains("user-edit-form")) return;
+function openAccountEditModal(account, type) {
+  if (!account) return;
+  const isAdmin = type === "admin";
+  const id = Number(account.id);
+  openModal({
+    title: `Edit ${isAdmin ? "admin" : "user"} #${id}`,
+    eyebrow: isAdmin ? "Admin CRUD" : "User CRUD",
+    tone: "admin",
+    submitText: `Save ${isAdmin ? "Admin" : "User"}`,
+    body: `
+      <form class="form-stack" data-id="${id}" data-resource="${isAdmin ? "admins" : "users"}">
+        <label for="modalAccountName">Name</label>
+        <input id="modalAccountName" name="name" value="${escapeHtml(account.name)}" placeholder="Name" required />
+        <label for="modalAccountEmail">Email</label>
+        <input id="modalAccountEmail" name="email" type="email" value="${escapeHtml(account.email)}" placeholder="Email" required />
+        <label for="modalAccountPassword">New password</label>
+        <input id="modalAccountPassword" name="password" type="password" placeholder="Required by API" required minlength="6" />
+      </form>
+    `,
+    onSubmit: updateAccount
+  });
+}
+
+async function updateAccount(event, modal) {
   event.preventDefault();
   const form = event.target;
-  await updateAccount(form, "users", loadUsers);
-}
-
-async function updateAdmin(event) {
-  if (!event.target.classList.contains("admin-edit-form")) return;
-  event.preventDefault();
-  const form = event.target;
-  await updateAccount(form, "admins", loadAdmins);
-}
-
-async function updateAccount(form, resource, reload) {
   const id = Number(form.dataset.id);
-  await runAdminAction({
-    method: "PUT",
-    path: `/api/${resource}/${id}`,
-    body: {
-      name: form.elements.name.value.trim(),
-      email: form.elements.email.value.trim(),
-      password: form.elements.password.value
-    },
-    message: `${resource === "admins" ? "Admin" : "User"} updated.`
-  }, reload);
+  const resource = form.dataset.resource;
+  modal?.setBusy(true, "Saving...");
+  try {
+    await runAdminAction({
+      method: "PUT",
+      path: `/api/${resource}/${id}`,
+      body: {
+        name: form.elements.name.value.trim(),
+        email: form.elements.email.value.trim(),
+        password: form.elements.password.value
+      },
+      message: `${resource === "admins" ? "Admin" : "User"} updated.`
+    }, resource === "admins" ? loadAdmins : loadUsers, { throwOnError: true });
+    modal?.setBusy(false);
+    modal?.close();
+  } catch {
+    modal?.setBusy(false);
+  }
 }
 
 async function loadComments() {
@@ -387,13 +691,19 @@ async function loadComments() {
 }
 
 async function handleCommentClick(event) {
-  if (event.target.dataset.action !== "delete-comment") return;
-  const id = Number(event.target.dataset.id);
-  await runAdminAction({
-    method: "DELETE",
-    path: `/api/interactions/comments/${id}`,
-    message: "Comment deactivated."
-  }, loadComments);
+  const target = event.target.closest("[data-action]");
+  if (target?.dataset.action !== "delete-comment") return;
+  const id = Number(target.dataset.id);
+  confirmAdminAction({
+    title: `Deactivate comment #${id}`,
+    message: "Deactivate this comment and remove it from active comment lists?",
+    config: {
+      method: "DELETE",
+      path: `/api/interactions/comments/${id}`,
+      message: "Comment deactivated."
+    },
+    reload: loadComments
+  });
 }
 
 async function loadMessages() {
@@ -420,7 +730,7 @@ async function loadMessages() {
   }
 }
 
-async function runAdminAction(config, reload) {
+async function runAdminAction(config, reload, options = {}) {
   if (!config) return;
 
   try {
@@ -431,8 +741,24 @@ async function runAdminAction(config, reload) {
     });
     showToast(config.message || "Action completed.");
     if (reload) await reload();
-    await loadOverview();
+    return true;
   } catch (error) {
     showToast(error.message, "error");
+    error.toastShown = true;
+    if (options.throwOnError) throw error;
+    return false;
   }
+}
+
+function confirmAdminAction({ title, message, config, reload, danger = true, confirmText = "Deactivate" }) {
+  openConfirmModal({
+    title,
+    eyebrow: danger ? "Destructive action" : "Confirm action",
+    message,
+    confirmText,
+    busyText: "Working...",
+    danger,
+    tone: "admin",
+    onConfirm: () => runAdminAction(config, reload, { throwOnError: true })
+  });
 }
