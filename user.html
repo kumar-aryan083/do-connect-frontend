@@ -6,119 +6,131 @@
   <title>DoConnect | User Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header class="topbar">
-    <div>
-      <h1>DoConnect</h1>
-      <p>User Dashboard</p>
-    </div>
-    <nav>
-      <span id="userEmail"></span>
-      <button id="logoutBtn" class="danger">Logout</button>
-    </nav>
-  </header>
-
-  <main class="dashboard">
-    <aside class="sidebar">
+<body class="app-body user-shell">
+  <aside class="app-sidebar">
+    <a class="sidebar-brand" href="index.html">
+      <span class="brand-mark small">DC</span>
+      <span>DoConnect</span>
+    </a>
+    <nav class="side-nav" aria-label="User navigation">
       <button class="nav-btn active" data-section="questionsSection">Questions</button>
-      <button class="nav-btn" data-section="answersSection">Answers</button>
-      <button class="nav-btn" data-section="interactionsSection">Likes & Comments</button>
       <button class="nav-btn" data-section="chatSection">Chat</button>
       <button class="nav-btn" data-section="profileSection">Profile</button>
-    </aside>
+    </nav>
+  </aside>
 
-    <section class="content">
-      <div id="questionsSection" class="panel active">
-        <h2>Ask Question</h2>
-        <form id="questionForm" class="grid-form">
-          <input id="questionTitle" placeholder="Question title" required />
-          <input id="questionTopic" placeholder="Topic, e.g. Java" required />
-          <textarea id="questionDescription" placeholder="Question description" required></textarea>
-          <input id="questionUserId" type="number" placeholder="Your user ID" required />
-          <button type="submit">Ask Question</button>
-        </form>
+  <main class="app-main">
+    <header class="app-topbar">
+      <div>
+        <p class="eyebrow">User Dashboard</p>
+        <h1>Question workspace</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="userEmail" class="session-pill">User</span>
+        <button id="logoutBtn" class="danger ghost-btn">Logout</button>
+      </div>
+    </header>
 
-        <h2>Search Questions</h2>
-        <div class="inline-form">
-          <input id="searchKeyword" placeholder="Search keyword" />
-          <button id="searchBtn">Search</button>
-          <button id="loadQuestionsBtn">Load Approved Questions</button>
+    <section class="dashboard-stats" aria-label="User dashboard stats">
+      <article class="stat-card">
+        <span id="questionCount">0</span>
+        <p>Approved Questions</p>
+      </article>
+      <article class="stat-card">
+        <span id="answerCount">0</span>
+        <p>Visible Answers</p>
+      </article>
+      <article class="stat-card">
+        <span id="peopleCount">0</span>
+        <p>Users</p>
+      </article>
+    </section>
+
+    <section id="questionsSection" class="panel active">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Q&A Threads</p>
+          <h2>Ask, search, and answer</h2>
         </div>
-        <div id="questionsList" class="cards"></div>
+        <button id="refreshQuestionsBtn" class="secondary-btn">Refresh</button>
       </div>
 
-      <div id="answersSection" class="panel">
-        <h2>Post Answer</h2>
-        <form id="answerForm" class="grid-form">
-          <input id="answerQuestionId" type="number" placeholder="Question ID" required />
-          <input id="answerUserId" type="number" placeholder="Your user ID" required />
-          <textarea id="answerContent" placeholder="Your answer" required></textarea>
-          <button type="submit">Submit Answer</button>
-        </form>
+      <div class="workspace-grid">
+        <article class="panel-card">
+          <h3>Ask a question</h3>
+          <form id="questionForm" class="form-stack">
+            <label for="questionTitle">Title</label>
+            <input id="questionTitle" placeholder="Example: How does JWT validation work?" required />
+            <label for="questionTopic">Topic</label>
+            <input id="questionTopic" placeholder="Java, Spring Boot, SQL..." required />
+            <label for="questionDescription">Description</label>
+            <textarea id="questionDescription" placeholder="Describe your issue clearly for other users." required></textarea>
+            <button id="askQuestionBtn" type="submit">Submit for Approval</button>
+          </form>
+        </article>
 
-        <h2>View Answers By Question</h2>
-        <div class="inline-form">
-          <input id="answersQuestionId" type="number" placeholder="Question ID" />
-          <button id="loadAnswersBtn">Load Answers</button>
-        </div>
-        <div id="answersList" class="cards"></div>
+        <article class="panel-card">
+          <h3>Search approved questions</h3>
+          <div class="search-row">
+            <input id="searchKeyword" placeholder="Search by topic or text" />
+            <button id="searchBtn" class="secondary-btn">Search</button>
+          </div>
+          <div class="hint-box">Only approved and active questions appear in the user workspace.</div>
+        </article>
       </div>
 
-      <div id="interactionsSection" class="panel">
-        <h2>Like Answer</h2>
-        <form id="likeForm" class="grid-form">
-          <input id="likeAnswerId" type="number" placeholder="Answer ID" required />
-          <input id="likeUserId" type="number" placeholder="Your user ID" required />
-          <button type="submit">Like Answer</button>
-        </form>
+      <div id="questionsList" class="cards question-feed"></div>
+    </section>
 
-        <h2>Comment On Answer</h2>
-        <form id="commentForm" class="grid-form">
-          <input id="commentAnswerId" type="number" placeholder="Answer ID" required />
-          <input id="commentUserId" type="number" placeholder="Your user ID" required />
-          <textarea id="commentText" placeholder="Comment" required></textarea>
-          <button type="submit">Add Comment</button>
-        </form>
-
-        <h2>View Comments</h2>
-        <div class="inline-form">
-          <input id="commentsAnswerId" type="number" placeholder="Answer ID" />
-          <button id="loadCommentsBtn">Load Comments</button>
+    <section id="chatSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">User Chat</p>
+          <h2>Conversation</h2>
         </div>
-        <div id="commentsList" class="cards"></div>
+        <button id="loadUsersBtn" class="secondary-btn">Load Users</button>
       </div>
 
-      <div id="chatSection" class="panel">
-        <h2>Send Message</h2>
-        <form id="chatForm" class="grid-form">
-          <input id="senderId" type="number" placeholder="Sender user ID" required />
-          <input id="receiverId" type="number" placeholder="Receiver user ID" required />
-          <textarea id="chatMessage" placeholder="Message" required></textarea>
-          <button type="submit">Send Message</button>
-        </form>
+      <div class="workspace-grid">
+        <article class="panel-card">
+          <h3>Send message</h3>
+          <form id="chatForm" class="form-stack">
+            <label for="receiverId">Receiver User ID</label>
+            <input id="receiverId" type="number" min="1" placeholder="Enter receiver user ID" required />
+            <label for="chatMessage">Message</label>
+            <textarea id="chatMessage" placeholder="Write your message" required></textarea>
+            <button id="sendMessageBtn" type="submit">Send Message</button>
+          </form>
+        </article>
 
-        <h2>View Conversation</h2>
-        <div class="inline-form">
-          <input id="convUserOne" type="number" placeholder="User One ID" />
-          <input id="convUserTwo" type="number" placeholder="User Two ID" />
-          <button id="loadConversationBtn">Load Conversation</button>
-        </div>
-        <div id="chatList" class="cards"></div>
+        <article class="panel-card">
+          <h3>Open conversation</h3>
+          <div class="form-stack">
+            <label for="conversationUserId">Other User ID</label>
+            <input id="conversationUserId" type="number" min="1" placeholder="Enter user ID" />
+            <button id="loadConversationBtn" class="secondary-btn">Load Conversation</button>
+          </div>
+        </article>
       </div>
 
-      <div id="profileSection" class="panel">
-        <h2>User Profile / Testing</h2>
-        <div class="inline-form">
-          <input id="profileUserId" type="number" placeholder="User ID" />
-          <button id="loadProfileBtn">Load Profile</button>
-          <button id="loadAllUsersBtn">Load All Users</button>
+      <div id="usersList" class="cards compact-cards"></div>
+      <div id="chatList" class="cards chat-list"></div>
+    </section>
+
+    <section id="profileSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Profile</p>
+          <h2>Your session</h2>
         </div>
-        <div id="profileResult" class="cards"></div>
+        <button id="reloadProfileBtn" class="secondary-btn">Reload Profile</button>
       </div>
+
+      <div id="profileResult" class="cards"></div>
     </section>
   </main>
 
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" role="status"></div>
 
   <script src="js/api.js"></script>
   <script src="js/user.js"></script>

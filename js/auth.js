@@ -1,97 +1,58 @@
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    document.querySelectorAll(".auth-form").forEach(f => f.classList.remove("active"));
+const authForm = document.getElementById("authForm");
+const authRole = document.body.dataset.authRole || "USER";
+const authMode = document.body.dataset.authMode || "login";
+const submitBtn = document.getElementById("submitBtn");
 
-    tab.classList.add("active");
-    document.getElementById(tab.dataset.target).classList.add("active");
-  });
-});
-
-function setMessage(message, type = "success") {
-  const box = document.getElementById("message");
-  box.textContent = message;
-  box.className = `message ${type}`;
+function authEndpoint(role, mode) {
+  if (role === "ADMIN") {
+    return mode === "login" ? "/api/admins/login" : "/api/admins/register";
+  }
+  return mode === "login" ? "/api/users/login" : "/api/users/register";
 }
 
-document.getElementById("user-register").addEventListener("submit", async e => {
-  e.preventDefault();
+function authPayload(mode) {
+  const payload = {
+    email: document.getElementById("email").value.trim(),
+    password: document.getElementById("password").value
+  };
 
-  try {
-    const data = await apiRequest("/api/users/register", {
-      method: "POST",
-      body: JSON.stringify({
-        name: document.getElementById("userRegisterName").value,
-        email: document.getElementById("userRegisterEmail").value,
-        password: document.getElementById("userRegisterPassword").value
-      })
-    });
-
-    setMessage(`User registered successfully. User ID: ${data.id}`);
-  } catch (err) {
-    setMessage(err.message, "error");
+  if (mode === "register") {
+    payload.name = document.getElementById("name").value.trim();
   }
-});
 
-document.getElementById("admin-register").addEventListener("submit", async e => {
-  e.preventDefault();
+  return payload;
+}
 
-  try {
-    const data = await apiRequest("/api/admins/register", {
-      method: "POST",
-      body: JSON.stringify({
-        name: document.getElementById("adminRegisterName").value,
-        email: document.getElementById("adminRegisterEmail").value,
-        password: document.getElementById("adminRegisterPassword").value
-      })
-    });
-
-    setMessage(`Admin registered successfully. Admin ID: ${data.id}`);
-  } catch (err) {
-    setMessage(err.message, "error");
-  }
-});
-
-document.getElementById("user-login").addEventListener("submit", async e => {
-  e.preventDefault();
+authForm?.addEventListener("submit", async event => {
+  event.preventDefault();
+  setButtonBusy(submitBtn, true, authMode === "login" ? "Signing in..." : "Creating...");
 
   try {
-    const data = await apiRequest("/api/users/login", {
+    const data = await apiRequest(authEndpoint(authRole, authMode), {
       method: "POST",
-      body: JSON.stringify({
-        email: document.getElementById("userLoginEmail").value,
-        password: document.getElementById("userLoginPassword").value
-      })
+      body: JSON.stringify(authPayload(authMode))
     });
 
-    localStorage.setItem("USER_TOKEN", data.token);
-    localStorage.setItem("USER_EMAIL", data.email);
-    localStorage.setItem("USER_ROLE", data.role);
+    if (authMode === "register") {
+      showToast(`${authRole === "ADMIN" ? "Admin" : "User"} registered successfully. You can login now.`);
+      window.setTimeout(() => {
+        window.location.href = getRoleConfig(authRole).loginPage;
+      }, 900);
+      return;
+    }
 
-    window.location.href = "user.html";
-  } catch (err) {
-    setMessage(err.message, "error");
-  }
-});
+    setSession(authRole, data);
 
-document.getElementById("admin-login").addEventListener("submit", async e => {
-  e.preventDefault();
+    try {
+      await resolveCurrentAccount(authRole, true);
+    } catch {
+      showToast("Login worked, but profile ID could not be resolved yet.", "warning");
+    }
 
-  try {
-    const data = await apiRequest("/api/admins/login", {
-      method: "POST",
-      body: JSON.stringify({
-        email: document.getElementById("adminLoginEmail").value,
-        password: document.getElementById("adminLoginPassword").value
-      })
-    });
-
-    localStorage.setItem("ADMIN_TOKEN", data.token);
-    localStorage.setItem("ADMIN_EMAIL", data.email);
-    localStorage.setItem("ADMIN_ROLE", data.role);
-
-    window.location.href = "admin.html";
-  } catch (err) {
-    setMessage(err.message, "error");
+    window.location.href = getRoleConfig(authRole).dashboardPage;
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setButtonBusy(submitBtn, false);
   }
 });

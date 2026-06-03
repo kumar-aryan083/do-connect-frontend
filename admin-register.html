@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DoConnect | Admin Register</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-auth-role="ADMIN" data-auth-mode="register">
+  <main class="auth-screen admin-auth">
+    <section class="auth-aside">
+      <a class="back-link" href="index.html">DoConnect</a>
+      <h1>Create Admin Account</h1>
+      <p>Register a moderator account for content approval, account management, and discussion control.</p>
+    </section>
+
+    <section class="auth-card focused">
+      <p class="eyebrow">Admin Registration</p>
+      <h2>Set up access</h2>
+      <form id="authForm" class="form-stack">
+        <label for="name">Full Name</label>
+        <input id="name" type="text" autocomplete="name" placeholder="Admin name" required />
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="admin@example.com" required />
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="new-password" placeholder="Minimum 6 characters" required minlength="6" />
+        <button id="submitBtn" class="admin-tone" type="submit">Create Admin Account</button>
+      </form>
+      <p class="auth-switch">Already registered? <a href="admin-login.html">Login as admin</a></p>
+      <div id="message" class="message" role="status"></div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

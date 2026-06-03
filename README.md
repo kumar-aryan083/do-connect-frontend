@@ -34,9 +34,13 @@ Right click index.html -> Open with Live Server
 ## Pages
 
 ```text
-index.html  - login/register page
-user.html   - user dashboard
-admin.html  - admin dashboard
+index.html          - role selection entry page
+user-login.html     - user login
+user-register.html  - user registration
+admin-login.html    - admin login
+admin-register.html - admin registration
+user.html           - user dashboard
+admin.html          - admin dashboard
 ```
 
 ## Default API Base

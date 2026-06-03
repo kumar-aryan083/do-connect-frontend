@@ -3,67 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DoConnect | Login</title>
+  <title>DoConnect | Welcome</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="auth-page">
-    <section class="hero">
+  <main class="welcome-page">
+    <section class="welcome-hero">
+      <div class="brand-mark">DC</div>
+      <p class="eyebrow">Capstone Q&A Platform</p>
       <h1>DoConnect</h1>
-      <p>A microservice-based Question & Answer platform for technical discussions.</p>
-      <div class="feature-grid">
-        <span>Ask Questions</span>
-        <span>Answer Threads</span>
+      <p class="lead">A clean question and answer workspace for technical discussions, approvals, answers, comments, likes, and user chat.</p>
+      <div class="hero-metrics" aria-label="DoConnect features">
+        <span>JWT Login</span>
         <span>Admin Approval</span>
-        <span>Likes & Comments</span>
+        <span>Q&A Threads</span>
         <span>User Chat</span>
-        <span>JWT Security</span>
       </div>
     </section>
 
-    <section class="auth-card">
-      <div class="tabs">
-        <button class="tab active" data-target="user-login">User Login</button>
-        <button class="tab" data-target="admin-login">Admin Login</button>
-        <button class="tab" data-target="user-register">User Register</button>
-        <button class="tab" data-target="admin-register">Admin Register</button>
+    <section class="role-panel" aria-label="Choose a role">
+      <div class="section-heading">
+        <p class="eyebrow">Continue As</p>
+        <h2>Choose your dashboard</h2>
       </div>
 
-      <form id="user-login" class="auth-form active">
-        <h2>User Login</h2>
-        <input id="userLoginEmail" type="email" placeholder="Email" required />
-        <input id="userLoginPassword" type="password" placeholder="Password" required />
-        <button type="submit">Login as User</button>
-      </form>
+      <div class="role-grid">
+        <article class="role-card">
+          <span class="role-icon">U</span>
+          <h3>User</h3>
+          <p>Ask questions, search topics, answer threads, like, comment, and chat with other users.</p>
+          <div class="role-actions">
+            <a class="btn primary" href="user-login.html">User Login</a>
+            <a class="btn secondary" href="user-register.html">Register</a>
+          </div>
+        </article>
 
-      <form id="admin-login" class="auth-form">
-        <h2>Admin Login</h2>
-        <input id="adminLoginEmail" type="email" placeholder="Email" required />
-        <input id="adminLoginPassword" type="password" placeholder="Password" required />
-        <button type="submit">Login as Admin</button>
-      </form>
-
-      <form id="user-register" class="auth-form">
-        <h2>User Register</h2>
-        <input id="userRegisterName" type="text" placeholder="Name" required />
-        <input id="userRegisterEmail" type="email" placeholder="Email" required />
-        <input id="userRegisterPassword" type="password" placeholder="Password" required />
-        <button type="submit">Register User</button>
-      </form>
-
-      <form id="admin-register" class="auth-form">
-        <h2>Admin Register</h2>
-        <input id="adminRegisterName" type="text" placeholder="Name" required />
-        <input id="adminRegisterEmail" type="email" placeholder="Email" required />
-        <input id="adminRegisterPassword" type="password" placeholder="Password" required />
-        <button type="submit">Register Admin</button>
-      </form>
-
-      <div id="message" class="message"></div>
+        <article class="role-card admin-card">
+          <span class="role-icon">A</span>
+          <h3>Admin</h3>
+          <p>Approve content, manage users and admins, moderate comments, and close resolved discussions.</p>
+          <div class="role-actions">
+            <a class="btn primary admin-tone" href="admin-login.html">Admin Login</a>
+            <a class="btn secondary" href="admin-register.html">Register</a>
+          </div>
+        </article>
+      </div>
     </section>
   </main>
-
-  <script src="js/api.js"></script>
-  <script src="js/auth.js"></script>
 </body>
 </html>

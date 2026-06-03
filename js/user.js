@@ -1,259 +1,409 @@
-setupNavigation();
+const userSession = requireSession("USER");
 
-document.getElementById("userEmail").textContent = localStorage.getItem("USER_EMAIL") || "User";
+if (userSession) {
+  setupNavigation();
+  bootUserDashboard();
+}
 
-document.getElementById("logoutBtn").addEventListener("click", () => {
-  localStorage.removeItem("USER_TOKEN");
-  localStorage.removeItem("USER_EMAIL");
-  window.location.href = "index.html";
-});
-
-document.getElementById("questionForm").addEventListener("submit", async e => {
-  e.preventDefault();
+async function bootUserDashboard() {
+  setText("userEmail", userSession.email || "User");
+  bindUserEvents();
 
   try {
+    await resolveCurrentAccount("USER", true);
+  } catch {
+    showToast("Profile ID could not be resolved. User actions may need backend data loaded first.", "warning");
+  }
+
+  await Promise.allSettled([
+    loadQuestions(),
+    loadUsers(),
+    loadProfile(),
+    loadAnswerStats()
+  ]);
+}
+
+function bindUserEvents() {
+  document.getElementById("logoutBtn")?.addEventListener("click", () => {
+    clearSession("USER");
+    window.location.href = "user-login.html";
+  });
+
+  document.getElementById("refreshQuestionsBtn")?.addEventListener("click", () => loadQuestions());
+  document.getElementById("searchBtn")?.addEventListener("click", () => searchQuestions());
+  document.getElementById("loadUsersBtn")?.addEventListener("click", () => loadUsers());
+  document.getElementById("loadConversationBtn")?.addEventListener("click", () => loadConversation());
+  document.getElementById("reloadProfileBtn")?.addEventListener("click", () => loadProfile(true));
+
+  document.getElementById("questionForm")?.addEventListener("submit", createQuestion);
+  document.getElementById("chatForm")?.addEventListener("submit", sendMessage);
+
+  document.getElementById("questionsList")?.addEventListener("click", event => {
+    const action = event.target.dataset.action;
+    if (action === "load-answers") {
+      loadAnswers(Number(event.target.dataset.questionId));
+    }
+    if (action === "like-answer") {
+      likeAnswer(Number(event.target.dataset.answerId), Number(event.target.dataset.questionId));
+    }
+    if (action === "load-comments") {
+      loadComments(Number(event.target.dataset.answerId));
+    }
+  });
+
+  document.getElementById("questionsList")?.addEventListener("submit", event => {
+    if (event.target.classList.contains("answer-form")) {
+      submitAnswer(event);
+    }
+    if (event.target.classList.contains("comment-form")) {
+      submitComment(event);
+    }
+  });
+}
+
+async function ensureCurrentUserId() {
+  let id = getCurrentId("USER");
+  if (!id) {
+    await resolveCurrentAccount("USER", true);
+    id = getCurrentId("USER");
+  }
+  if (!id) throw new Error("Could not resolve your user ID. Please login again after the backend is running.");
+  return id;
+}
+
+async function createQuestion(event) {
+  event.preventDefault();
+  const button = document.getElementById("askQuestionBtn");
+  setButtonBusy(button, true, "Submitting...");
+
+  try {
+    const userId = await ensureCurrentUserId();
     const data = await apiRequest("/api/questions", {
       method: "POST",
       headers: getAuthHeaders("USER"),
       body: JSON.stringify({
-        title: questionTitle.value,
-        description: questionDescription.value,
-        topic: questionTopic.value,
-        userId: Number(questionUserId.value)
+        title: document.getElementById("questionTitle").value.trim(),
+        description: document.getElementById("questionDescription").value.trim(),
+        topic: document.getElementById("questionTopic").value.trim(),
+        userId
       })
     });
 
-    showToast(`Question submitted. Waiting for admin approval. ID: ${data.id}`);
-    e.target.reset();
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-});
-
-document.getElementById("loadQuestionsBtn").addEventListener("click", loadQuestions);
-
-async function loadQuestions() {
-  try {
-    const data = await apiRequest("/api/questions", {
-      headers: getAuthHeaders("USER")
-    });
-
-    renderCards("questionsList", data, q => `
-      <div class="card">
-        <h3>#${q.id} ${safe(q.title)}</h3>
-        <div class="meta">
-          <span class="badge">${safe(q.topic)}</span>
-          <span>Approved: ${q.approved}</span>
-          <span>Active: ${q.active}</span>
-          <span>Resolved: ${q.resolved}</span>
-        </div>
-        <p>${safe(q.description)}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
+    event.target.reset();
+    showToast(`Question submitted for admin approval. ID: ${data.id}`);
+    await loadQuestions();
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setButtonBusy(button, false);
   }
 }
 
-document.getElementById("searchBtn").addEventListener("click", async () => {
+async function loadQuestions(keyword = "") {
   try {
-    const keyword = document.getElementById("searchKeyword").value;
-    const data = await apiRequest(`/api/questions/search?keyword=${encodeURIComponent(keyword)}`, {
+    const path = keyword
+      ? `/api/questions/search?keyword=${encodeURIComponent(keyword)}`
+      : "/api/questions";
+    const questions = await apiRequest(path, {
       headers: getAuthHeaders("USER")
     });
 
-    renderCards("questionsList", data, q => `
-      <div class="card">
-        <h3>#${q.id} ${safe(q.title)}</h3>
-        <div class="meta"><span class="badge">${safe(q.topic)}</span></div>
-        <p>${safe(q.description)}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
+    updateStat("questionCount", questions?.length || 0);
+    renderCards("questionsList", questions, renderQuestionCard, "No approved questions are available yet.");
+  } catch (error) {
+    showToast(error.message, "error");
   }
-});
+}
 
-document.getElementById("answerForm").addEventListener("submit", async e => {
-  e.preventDefault();
+function searchQuestions() {
+  const keyword = document.getElementById("searchKeyword").value.trim();
+  loadQuestions(keyword);
+}
+
+function renderQuestionCard(question) {
+  const id = Number(question.id);
+  return `
+    <article class="thread-card">
+      <div class="card-topline">
+        <span class="topic-chip">${escapeHtml(question.topic)}</span>
+        ${statusBadge(question)}
+      </div>
+      <h3>#${id} ${escapeHtml(question.title)}</h3>
+      <p>${escapeHtml(question.description)}</p>
+      <div class="meta">
+        <span>User #${escapeHtml(question.userId)}</span>
+        <span>${question.resolved ? "Closed thread" : "Active thread"}</span>
+      </div>
+      <div class="card-actions">
+        <button class="secondary-btn" data-action="load-answers" data-question-id="${id}">View Answers</button>
+      </div>
+      <form class="answer-form inline-composer" data-question-id="${id}">
+        <textarea name="content" placeholder="Write an answer for this question" required></textarea>
+        <button type="submit">Submit Answer</button>
+      </form>
+      <div id="answers-${id}" class="answers-region"></div>
+    </article>
+  `;
+}
+
+async function submitAnswer(event) {
+  event.preventDefault();
+  const form = event.target;
+  const questionId = Number(form.dataset.questionId);
+  const button = form.querySelector("button");
+  setButtonBusy(button, true, "Posting...");
 
   try {
+    const userId = await ensureCurrentUserId();
     const data = await apiRequest("/api/answers", {
       method: "POST",
       headers: getAuthHeaders("USER"),
       body: JSON.stringify({
-        questionId: Number(answerQuestionId.value),
-        userId: Number(answerUserId.value),
-        content: answerContent.value
+        questionId,
+        userId,
+        content: form.elements.content.value.trim()
       })
     });
 
-    showToast(`Answer submitted. Waiting for approval. ID: ${data.id}`);
-    e.target.reset();
-  } catch (err) {
-    showToast(err.message, "error");
+    form.reset();
+    showToast(`Answer submitted for admin approval. ID: ${data.id}`);
+    await loadAnswers(questionId);
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setButtonBusy(button, false);
   }
-});
+}
 
-document.getElementById("loadAnswersBtn").addEventListener("click", async () => {
+async function loadAnswers(questionId) {
+  const container = document.getElementById(`answers-${questionId}`);
+  if (!container) return;
+  container.innerHTML = `<div class="empty-state">Loading answers...</div>`;
+
   try {
-    const questionId = document.getElementById("answersQuestionId").value;
-    const data = await apiRequest(`/api/answers/question/${questionId}`, {
+    const answers = await apiRequest(`/api/answers/question/${questionId}`, {
       headers: getAuthHeaders("USER")
     });
 
-    renderCards("answersList", data, a => `
-      <div class="card">
-        <h3>Answer #${a.id}</h3>
-        <div class="meta">
-          <span>Question: ${a.questionId}</span>
-          <span>User: ${a.userId}</span>
-          <span>Approved: ${a.approved}</span>
-        </div>
-        <p>${safe(a.content)}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
+    const answersWithLikes = await Promise.all((answers || []).map(async answer => {
+      try {
+        const likes = await apiRequest(`/api/interactions/likes/count/${answer.id}`, {
+          headers: getAuthHeaders("USER")
+        });
+        return { ...answer, likes };
+      } catch {
+        return { ...answer, likes: 0 };
+      }
+    }));
+
+    updateStat("answerCount", answersWithLikes.length);
+
+    if (!answersWithLikes.length) {
+      container.innerHTML = `<div class="empty-state">No approved answers yet.</div>`;
+      return;
+    }
+
+    container.innerHTML = answersWithLikes.map(answer => renderAnswerCard(answer, questionId)).join("");
+  } catch (error) {
+    container.innerHTML = `<div class="empty-state error-text">${escapeHtml(error.message)}</div>`;
   }
-});
+}
 
-document.getElementById("likeForm").addEventListener("submit", async e => {
-  e.preventDefault();
+function renderAnswerCard(answer, questionId) {
+  const id = Number(answer.id);
+  return `
+    <article class="answer-card">
+      <div class="card-topline">
+        <strong>Answer #${id}</strong>
+        ${statusBadge(answer)}
+      </div>
+      <p>${escapeHtml(answer.content)}</p>
+      <div class="meta">
+        <span>User #${escapeHtml(answer.userId)}</span>
+        <span>${Number(answer.likes || 0)} likes</span>
+      </div>
+      <div class="card-actions">
+        <button class="secondary-btn" data-action="like-answer" data-answer-id="${id}" data-question-id="${questionId}">Like</button>
+        <button class="secondary-btn" data-action="load-comments" data-answer-id="${id}">Show Comments</button>
+      </div>
+      <form class="comment-form inline-composer compact" data-answer-id="${id}" data-question-id="${questionId}">
+        <input name="comment" placeholder="Add a comment" required />
+        <button type="submit">Comment</button>
+      </form>
+      <div id="comments-${id}" class="comments-region"></div>
+    </article>
+  `;
+}
 
+async function likeAnswer(answerId, questionId) {
   try {
+    const userId = await ensureCurrentUserId();
     await apiRequest("/api/interactions/likes", {
       method: "POST",
       headers: getAuthHeaders("USER"),
-      body: JSON.stringify({
-        answerId: Number(likeAnswerId.value),
-        userId: Number(likeUserId.value)
-      })
+      body: JSON.stringify({ answerId, userId })
     });
-
-    showToast("Answer liked successfully.");
-    e.target.reset();
-  } catch (err) {
-    showToast(err.message, "error");
+    showToast("Answer liked.");
+    await loadAnswers(questionId);
+  } catch (error) {
+    showToast(error.message, "error");
   }
-});
+}
 
-document.getElementById("commentForm").addEventListener("submit", async e => {
-  e.preventDefault();
+async function submitComment(event) {
+  event.preventDefault();
+  const form = event.target;
+  const answerId = Number(form.dataset.answerId);
+  const button = form.querySelector("button");
+  setButtonBusy(button, true, "Adding...");
 
   try {
-    const data = await apiRequest("/api/interactions/comments", {
+    const userId = await ensureCurrentUserId();
+    await apiRequest("/api/interactions/comments", {
       method: "POST",
       headers: getAuthHeaders("USER"),
       body: JSON.stringify({
-        answerId: Number(commentAnswerId.value),
-        userId: Number(commentUserId.value),
-        comment: commentText.value
+        answerId,
+        userId,
+        comment: form.elements.comment.value.trim()
       })
     });
-
-    showToast(`Comment added. ID: ${data.id}`);
-    e.target.reset();
-  } catch (err) {
-    showToast(err.message, "error");
+    form.reset();
+    showToast("Comment added.");
+    await loadComments(answerId);
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setButtonBusy(button, false);
   }
-});
+}
 
-document.getElementById("loadCommentsBtn").addEventListener("click", async () => {
+async function loadComments(answerId) {
+  const container = document.getElementById(`comments-${answerId}`);
+  if (!container) return;
+  container.innerHTML = `<div class="empty-state">Loading comments...</div>`;
+
   try {
-    const answerId = document.getElementById("commentsAnswerId").value;
-    const data = await apiRequest(`/api/interactions/comments/answer/${answerId}`, {
+    const comments = await apiRequest(`/api/interactions/comments/answer/${answerId}`, {
       headers: getAuthHeaders("USER")
     });
 
-    renderCards("commentsList", data, c => `
-      <div class="card">
-        <h3>Comment #${c.id}</h3>
-        <div class="meta"><span>User: ${c.userId}</span><span>Answer: ${c.answerId}</span></div>
-        <p>${safe(c.comment)}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-});
+    if (!comments?.length) {
+      container.innerHTML = `<div class="empty-state">No active comments.</div>`;
+      return;
+    }
 
-document.getElementById("chatForm").addEventListener("submit", async e => {
-  e.preventDefault();
+    container.innerHTML = comments.map(comment => `
+      <div class="comment-row">
+        <span>User #${escapeHtml(comment.userId)}</span>
+        <p>${escapeHtml(comment.comment)}</p>
+      </div>
+    `).join("");
+  } catch (error) {
+    container.innerHTML = `<div class="empty-state error-text">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function loadUsers() {
+  try {
+    const users = await apiRequest("/api/users", {
+      headers: getAuthHeaders("USER")
+    });
+
+    updateStat("peopleCount", users?.length || 0);
+    renderCards("usersList", users, user => `
+      <article class="mini-card">
+        <strong>#${escapeHtml(user.id)} ${accountLabel(user, "User")}</strong>
+        <span>${escapeHtml(user.email)} - ${getStatusLabel(user)}</span>
+      </article>
+    `, "No users available.");
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function sendMessage(event) {
+  event.preventDefault();
+  const button = document.getElementById("sendMessageBtn");
+  setButtonBusy(button, true, "Sending...");
 
   try {
-    const data = await apiRequest("/api/chats", {
+    const senderId = await ensureCurrentUserId();
+    const receiverId = Number(document.getElementById("receiverId").value);
+    await apiRequest("/api/chats", {
       method: "POST",
       headers: getAuthHeaders("USER"),
       body: JSON.stringify({
-        senderId: Number(senderId.value),
-        receiverId: Number(receiverId.value),
-        message: chatMessage.value
+        senderId,
+        receiverId,
+        message: document.getElementById("chatMessage").value.trim()
       })
     });
 
-    showToast(`Message sent. ID: ${data.id}`);
-    e.target.reset();
-  } catch (err) {
-    showToast(err.message, "error");
+    event.target.reset();
+    document.getElementById("conversationUserId").value = receiverId;
+    showToast("Message sent.");
+    await loadConversation(receiverId);
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setButtonBusy(button, false);
   }
-});
+}
 
-document.getElementById("loadConversationBtn").addEventListener("click", async () => {
+async function loadConversation(preselectedUserId) {
   try {
-    const userOne = document.getElementById("convUserOne").value;
-    const userTwo = document.getElementById("convUserTwo").value;
+    const userOneId = await ensureCurrentUserId();
+    const userTwoId = Number(preselectedUserId || document.getElementById("conversationUserId").value);
+    if (!userTwoId) throw new Error("Enter another user ID to load a conversation.");
 
-    const data = await apiRequest(`/api/chats/conversation?userOneId=${userOne}&userTwoId=${userTwo}`, {
+    const messages = await apiRequest(`/api/chats/conversation?userOneId=${userOneId}&userTwoId=${userTwoId}`, {
       headers: getAuthHeaders("USER")
     });
 
-    renderCards("chatList", data, m => `
-      <div class="card">
-        <h3>Message #${m.id}</h3>
-        <div class="meta"><span>${m.senderId} → ${m.receiverId}</span><span>${safe(m.createdAt)}</span></div>
-        <p>${safe(m.message)}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
+    renderCards("chatList", messages, message => `
+      <article class="chat-bubble ${Number(message.senderId) === Number(userOneId) ? "mine" : ""}">
+        <div class="meta">
+          <span>${escapeHtml(message.senderId)} to ${escapeHtml(message.receiverId)}</span>
+          <span>${formatDate(message.createdAt)}</span>
+        </div>
+        <p>${escapeHtml(message.message)}</p>
+      </article>
+    `, "No messages in this conversation.");
+  } catch (error) {
+    showToast(error.message, "error");
   }
-});
+}
 
-document.getElementById("loadProfileBtn").addEventListener("click", async () => {
+async function loadProfile(force = false) {
   try {
-    const id = document.getElementById("profileUserId").value;
-    const data = await apiRequest(`/api/users/${id}`, {
+    const account = await resolveCurrentAccount("USER", force);
+    renderCards("profileResult", [account], user => `
+      <article class="profile-card">
+        <div class="avatar">${escapeHtml((user.name || user.email || "U").slice(0, 1).toUpperCase())}</div>
+        <div>
+          <h3>${accountLabel(user, "User")}</h3>
+          <p>${escapeHtml(user.email)}</p>
+          <div class="meta">
+            <span>User ID: ${escapeHtml(user.id || "Resolving")}</span>
+            <span>Role: ${escapeHtml(user.role || "USER")}</span>
+            <span>${getStatusLabel(user)}</span>
+          </div>
+        </div>
+      </article>
+    `);
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function loadAnswerStats() {
+  try {
+    const answers = await apiRequest("/api/answers", {
       headers: getAuthHeaders("USER")
     });
-
-    renderCards("profileResult", [data], u => `
-      <div class="card">
-        <h3>User #${u.id}</h3>
-        <p>Name: ${safe(u.name)}</p>
-        <p>Email: ${safe(u.email)}</p>
-        <p>Role: ${safe(u.role)}</p>
-        <p>Active: ${u.active}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
+    updateStat("answerCount", answers?.length || 0);
+  } catch {
+    updateStat("answerCount", 0);
   }
-});
-
-document.getElementById("loadAllUsersBtn").addEventListener("click", async () => {
-  try {
-    const data = await apiRequest("/api/users", {
-      headers: getAuthHeaders("USER")
-    });
-
-    renderCards("profileResult", data, u => `
-      <div class="card">
-        <h3>User #${u.id}</h3>
-        <p>${safe(u.name)} | ${safe(u.email)} | Active: ${u.active}</p>
-      </div>
-    `);
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-});
+}

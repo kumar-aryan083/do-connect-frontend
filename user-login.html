@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DoConnect | User Login</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-auth-role="USER" data-auth-mode="login">
+  <main class="auth-screen user-auth">
+    <section class="auth-aside">
+      <a class="back-link" href="index.html">DoConnect</a>
+      <h1>User Login</h1>
+      <p>Enter the discussion dashboard to ask questions, answer threads, comment, like, and chat.</p>
+    </section>
+
+    <section class="auth-card focused">
+      <p class="eyebrow">User Account</p>
+      <h2>Welcome back</h2>
+      <form id="authForm" class="form-stack">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Enter password" required />
+        <button id="submitBtn" type="submit">Login as User</button>
+      </form>
+      <p class="auth-switch">New to DoConnect? <a href="user-register.html">Create user account</a></p>
+      <p class="auth-switch muted-link"><a href="admin-login.html">Login as admin instead</a></p>
+      <div id="message" class="message" role="status"></div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+</body>
+</html>

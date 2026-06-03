@@ -6,99 +6,139 @@
   <title>DoConnect | Admin Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header class="topbar admin">
-    <div>
-      <h1>DoConnect</h1>
-      <p>Admin Dashboard</p>
-    </div>
-    <nav>
-      <span id="adminEmail"></span>
-      <button id="logoutBtn" class="danger">Logout</button>
-    </nav>
-  </header>
-
-  <main class="dashboard">
-    <aside class="sidebar">
-      <button class="nav-btn active" data-section="usersSection">Users</button>
+<body class="app-body admin-shell">
+  <aside class="app-sidebar">
+    <a class="sidebar-brand" href="index.html">
+      <span class="brand-mark small">DC</span>
+      <span>DoConnect</span>
+    </a>
+    <nav class="side-nav" aria-label="Admin navigation">
+      <button class="nav-btn active" data-section="overviewSection">Overview</button>
       <button class="nav-btn" data-section="questionsSection">Questions</button>
       <button class="nav-btn" data-section="answersSection">Answers</button>
+      <button class="nav-btn" data-section="usersSection">Users</button>
       <button class="nav-btn" data-section="adminsSection">Admins</button>
       <button class="nav-btn" data-section="commentsSection">Comments</button>
       <button class="nav-btn" data-section="chatSection">Chats</button>
-    </aside>
+    </nav>
+  </aside>
 
-    <section class="content">
-      <div id="usersSection" class="panel active">
-        <h2>User Management</h2>
-        <button id="loadUsersBtn">Load Users</button>
-        <div class="inline-form">
-          <input id="deactivateUserId" type="number" placeholder="User ID to deactivate" />
-          <button id="deactivateUserBtn" class="danger">Deactivate User</button>
-        </div>
-        <div id="usersList" class="cards"></div>
+  <main class="app-main">
+    <header class="app-topbar">
+      <div>
+        <p class="eyebrow">Admin Dashboard</p>
+        <h1>Moderation console</h1>
       </div>
+      <div class="topbar-actions">
+        <span id="adminEmail" class="session-pill">Admin</span>
+        <button id="logoutBtn" class="danger ghost-btn">Logout</button>
+      </div>
+    </header>
 
-      <div id="questionsSection" class="panel">
-        <h2>Question Approval</h2>
-        <button id="loadAllQuestionsBtn">Load All Questions</button>
-        <div class="inline-form">
-          <input id="questionActionId" type="number" placeholder="Question ID" />
-          <button id="approveQuestionBtn">Approve</button>
-          <button id="rejectQuestionBtn">Reject</button>
-          <button id="resolveQuestionBtn">Resolve</button>
-          <button id="deleteQuestionBtn" class="danger">Deactivate</button>
-        </div>
-        <div id="questionsList" class="cards"></div>
-      </div>
+    <section class="dashboard-stats" aria-label="Admin dashboard stats">
+      <article class="stat-card">
+        <span id="totalUsers">0</span>
+        <p>Users</p>
+      </article>
+      <article class="stat-card">
+        <span id="pendingQuestions">0</span>
+        <p>Pending Questions</p>
+      </article>
+      <article class="stat-card">
+        <span id="pendingAnswers">0</span>
+        <p>Pending Answers</p>
+      </article>
+      <article class="stat-card">
+        <span id="totalAdmins">0</span>
+        <p>Admins</p>
+      </article>
+    </section>
 
-      <div id="answersSection" class="panel">
-        <h2>Answer Approval</h2>
-        <button id="loadAllAnswersBtn">Load All Answers</button>
-        <div class="inline-form">
-          <input id="answerActionId" type="number" placeholder="Answer ID" />
-          <button id="approveAnswerBtn">Approve</button>
-          <button id="rejectAnswerBtn">Reject</button>
-          <button id="deleteAnswerBtn" class="danger">Deactivate</button>
+    <section id="overviewSection" class="panel active">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Platform Snapshot</p>
+          <h2>Ready for review</h2>
         </div>
-        <div id="answersList" class="cards"></div>
+        <button id="refreshOverviewBtn" class="secondary-btn admin-tone">Refresh All</button>
       </div>
+      <div id="overviewList" class="cards split-cards"></div>
+    </section>
 
-      <div id="adminsSection" class="panel">
-        <h2>Admin Management</h2>
-        <button id="loadAdminsBtn">Load Admins</button>
-        <div class="inline-form">
-          <input id="deactivateAdminId" type="number" placeholder="Admin ID to deactivate" />
-          <button id="deactivateAdminBtn" class="danger">Deactivate Admin</button>
+    <section id="questionsSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Question CRUD</p>
+          <h2>Approve and close questions</h2>
         </div>
-        <div id="adminsList" class="cards"></div>
+        <button id="loadQuestionsBtn" class="secondary-btn admin-tone">Load Questions</button>
       </div>
+      <div id="questionsList" class="cards moderation-list"></div>
+    </section>
 
-      <div id="commentsSection" class="panel">
-        <h2>Comment Moderation</h2>
-        <div class="inline-form">
-          <input id="commentAnswerId" type="number" placeholder="Answer ID" />
-          <button id="loadCommentsBtn">Load Comments For Answer</button>
+    <section id="answersSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Answer Moderation</p>
+          <h2>Approve useful answers</h2>
         </div>
-        <div class="inline-form">
-          <input id="commentDeleteId" type="number" placeholder="Comment ID" />
-          <button id="deleteCommentBtn" class="danger">Deactivate Comment</button>
-        </div>
-        <div id="commentsList" class="cards"></div>
+        <button id="loadAnswersBtn" class="secondary-btn admin-tone">Load Answers</button>
       </div>
+      <div id="answersList" class="cards moderation-list"></div>
+    </section>
 
-      <div id="chatSection" class="panel">
-        <h2>Chat Messages</h2>
-        <div class="inline-form">
-          <input id="chatUserId" type="number" placeholder="User ID" />
-          <button id="loadUserMessagesBtn">Load User Messages</button>
+    <section id="usersSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">User CRUD</p>
+          <h2>Manage users</h2>
         </div>
-        <div id="chatList" class="cards"></div>
+        <button id="loadUsersBtn" class="secondary-btn admin-tone">Load Users</button>
       </div>
+      <div id="usersList" class="cards moderation-list"></div>
+    </section>
+
+    <section id="adminsSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Admin CRUD</p>
+          <h2>Manage admins</h2>
+        </div>
+        <button id="loadAdminsBtn" class="secondary-btn admin-tone">Load Admins</button>
+      </div>
+      <div id="adminsList" class="cards moderation-list"></div>
+    </section>
+
+    <section id="commentsSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Comment Moderation</p>
+          <h2>Review answer comments</h2>
+        </div>
+      </div>
+      <div class="search-row toolbar-row">
+        <input id="commentAnswerId" type="number" min="1" placeholder="Answer ID" />
+        <button id="loadCommentsBtn" class="secondary-btn admin-tone">Load Comments</button>
+      </div>
+      <div id="commentsList" class="cards moderation-list"></div>
+    </section>
+
+    <section id="chatSection" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Chat Monitoring</p>
+          <h2>User messages</h2>
+        </div>
+      </div>
+      <div class="search-row toolbar-row">
+        <input id="chatUserId" type="number" min="1" placeholder="User ID" />
+        <button id="loadMessagesBtn" class="secondary-btn admin-tone">Load Messages</button>
+      </div>
+      <div id="chatList" class="cards chat-list"></div>
     </section>
   </main>
 
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" role="status"></div>
 
   <script src="js/api.js"></script>
   <script src="js/admin.js"></script>
