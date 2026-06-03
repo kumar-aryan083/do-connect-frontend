@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DoConnect | User Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>DoConnect</h1>
+      <p>User Dashboard</p>
+    </div>
+    <nav>
+      <span id="userEmail"></span>
+      <button id="logoutBtn" class="danger">Logout</button>
+    </nav>
+  </header>
+
+  <main class="dashboard">
+    <aside class="sidebar">
+      <button class="nav-btn active" data-section="questionsSection">Questions</button>
+      <button class="nav-btn" data-section="answersSection">Answers</button>
+      <button class="nav-btn" data-section="interactionsSection">Likes & Comments</button>
+      <button class="nav-btn" data-section="chatSection">Chat</button>
+      <button class="nav-btn" data-section="profileSection">Profile</button>
+    </aside>
+
+    <section class="content">
+      <div id="questionsSection" class="panel active">
+        <h2>Ask Question</h2>
+        <form id="questionForm" class="grid-form">
+          <input id="questionTitle" placeholder="Question title" required />
+          <input id="questionTopic" placeholder="Topic, e.g. Java" required />
+          <textarea id="questionDescription" placeholder="Question description" required></textarea>
+          <input id="questionUserId" type="number" placeholder="Your user ID" required />
+          <button type="submit">Ask Question</button>
+        </form>
+
+        <h2>Search Questions</h2>
+        <div class="inline-form">
+          <input id="searchKeyword" placeholder="Search keyword" />
+          <button id="searchBtn">Search</button>
+          <button id="loadQuestionsBtn">Load Approved Questions</button>
+        </div>
+        <div id="questionsList" class="cards"></div>
+      </div>
+
+      <div id="answersSection" class="panel">
+        <h2>Post Answer</h2>
+        <form id="answerForm" class="grid-form">
+          <input id="answerQuestionId" type="number" placeholder="Question ID" required />
+          <input id="answerUserId" type="number" placeholder="Your user ID" required />
+          <textarea id="answerContent" placeholder="Your answer" required></textarea>
+          <button type="submit">Submit Answer</button>
+        </form>
+
+        <h2>View Answers By Question</h2>
+        <div class="inline-form">
+          <input id="answersQuestionId" type="number" placeholder="Question ID" />
+          <button id="loadAnswersBtn">Load Answers</button>
+        </div>
+        <div id="answersList" class="cards"></div>
+      </div>
+
+      <div id="interactionsSection" class="panel">
+        <h2>Like Answer</h2>
+        <form id="likeForm" class="grid-form">
+          <input id="likeAnswerId" type="number" placeholder="Answer ID" required />
+          <input id="likeUserId" type="number" placeholder="Your user ID" required />
+          <button type="submit">Like Answer</button>
+        </form>
+
+        <h2>Comment On Answer</h2>
+        <form id="commentForm" class="grid-form">
+          <input id="commentAnswerId" type="number" placeholder="Answer ID" required />
+          <input id="commentUserId" type="number" placeholder="Your user ID" required />
+          <textarea id="commentText" placeholder="Comment" required></textarea>
+          <button type="submit">Add Comment</button>
+        </form>
+
+        <h2>View Comments</h2>
+        <div class="inline-form">
+          <input id="commentsAnswerId" type="number" placeholder="Answer ID" />
+          <button id="loadCommentsBtn">Load Comments</button>
+        </div>
+        <div id="commentsList" class="cards"></div>
+      </div>
+
+      <div id="chatSection" class="panel">
+        <h2>Send Message</h2>
+        <form id="chatForm" class="grid-form">
+          <input id="senderId" type="number" placeholder="Sender user ID" required />
+          <input id="receiverId" type="number" placeholder="Receiver user ID" required />
+          <textarea id="chatMessage" placeholder="Message" required></textarea>
+          <button type="submit">Send Message</button>
+        </form>
+
+        <h2>View Conversation</h2>
+        <div class="inline-form">
+          <input id="convUserOne" type="number" placeholder="User One ID" />
+          <input id="convUserTwo" type="number" placeholder="User Two ID" />
+          <button id="loadConversationBtn">Load Conversation</button>
+        </div>
+        <div id="chatList" class="cards"></div>
+      </div>
+
+      <div id="profileSection" class="panel">
+        <h2>User Profile / Testing</h2>
+        <div class="inline-form">
+          <input id="profileUserId" type="number" placeholder="User ID" />
+          <button id="loadProfileBtn">Load Profile</button>
+          <button id="loadAllUsersBtn">Load All Users</button>
+        </div>
+        <div id="profileResult" class="cards"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/user.js"></script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DoConnect | Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar admin">
+    <div>
+      <h1>DoConnect</h1>
+      <p>Admin Dashboard</p>
+    </div>
+    <nav>
+      <span id="adminEmail"></span>
+      <button id="logoutBtn" class="danger">Logout</button>
+    </nav>
+  </header>
+
+  <main class="dashboard">
+    <aside class="sidebar">
+      <button class="nav-btn active" data-section="usersSection">Users</button>
+      <button class="nav-btn" data-section="questionsSection">Questions</button>
+      <button class="nav-btn" data-section="answersSection">Answers</button>
+      <button class="nav-btn" data-section="adminsSection">Admins</button>
+      <button class="nav-btn" data-section="commentsSection">Comments</button>
+      <button class="nav-btn" data-section="chatSection">Chats</button>
+    </aside>
+
+    <section class="content">
+      <div id="usersSection" class="panel active">
+        <h2>User Management</h2>
+        <button id="loadUsersBtn">Load Users</button>
+        <div class="inline-form">
+          <input id="deactivateUserId" type="number" placeholder="User ID to deactivate" />
+          <button id="deactivateUserBtn" class="danger">Deactivate User</button>
+        </div>
+        <div id="usersList" class="cards"></div>
+      </div>
+
+      <div id="questionsSection" class="panel">
+        <h2>Question Approval</h2>
+        <button id="loadAllQuestionsBtn">Load All Questions</button>
+        <div class="inline-form">
+          <input id="questionActionId" type="number" placeholder="Question ID" />
+          <button id="approveQuestionBtn">Approve</button>
+          <button id="rejectQuestionBtn">Reject</button>
+          <button id="resolveQuestionBtn">Resolve</button>
+          <button id="deleteQuestionBtn" class="danger">Deactivate</button>
+        </div>
+        <div id="questionsList" class="cards"></div>
+      </div>
+
+      <div id="answersSection" class="panel">
+        <h2>Answer Approval</h2>
+        <button id="loadAllAnswersBtn">Load All Answers</button>
+        <div class="inline-form">
+          <input id="answerActionId" type="number" placeholder="Answer ID" />
+          <button id="approveAnswerBtn">Approve</button>
+          <button id="rejectAnswerBtn">Reject</button>
+          <button id="deleteAnswerBtn" class="danger">Deactivate</button>
+        </div>
+        <div id="answersList" class="cards"></div>
+      </div>
+
+      <div id="adminsSection" class="panel">
+        <h2>Admin Management</h2>
+        <button id="loadAdminsBtn">Load Admins</button>
+        <div class="inline-form">
+          <input id="deactivateAdminId" type="number" placeholder="Admin ID to deactivate" />
+          <button id="deactivateAdminBtn" class="danger">Deactivate Admin</button>
+        </div>
+        <div id="adminsList" class="cards"></div>
+      </div>
+
+      <div id="commentsSection" class="panel">
+        <h2>Comment Moderation</h2>
+        <div class="inline-form">
+          <input id="commentAnswerId" type="number" placeholder="Answer ID" />
+          <button id="loadCommentsBtn">Load Comments For Answer</button>
+        </div>
+        <div class="inline-form">
+          <input id="commentDeleteId" type="number" placeholder="Comment ID" />
+          <button id="deleteCommentBtn" class="danger">Deactivate Comment</button>
+        </div>
+        <div id="commentsList" class="cards"></div>
+      </div>
+
+      <div id="chatSection" class="panel">
+        <h2>Chat Messages</h2>
+        <div class="inline-form">
+          <input id="chatUserId" type="number" placeholder="User ID" />
+          <button id="loadUserMessagesBtn">Load User Messages</button>
+        </div>
+        <div id="chatList" class="cards"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
