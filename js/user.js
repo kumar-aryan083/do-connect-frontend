@@ -17,19 +17,16 @@ async function bootUserDashboard() {
     showToast("Profile ID could not be resolved. User actions may need backend data loaded first.", "warning");
   }
 
+  await loadUsers();
   await Promise.allSettled([
     loadQuestions(),
-    loadUsers(),
     loadProfile(),
     loadAnswerStats()
   ]);
 }
 
 function bindUserEvents() {
-  document.getElementById("logoutBtn")?.addEventListener("click", () => {
-    clearSession("USER");
-    window.location.href = "user-login.html";
-  });
+  document.getElementById("logoutBtn")?.addEventListener("click", () => logoutSession("USER"));
 
   document.getElementById("openQuestionModalBtn")?.addEventListener("click", openQuestionModal);
   document.getElementById("openMessageModalBtn")?.addEventListener("click", () => openMessageModal());
@@ -45,16 +42,20 @@ function bindUserEvents() {
     const target = event.target.closest("[data-action]");
     const action = target?.dataset.action;
     if (action === "load-answers") {
-      loadAnswers(Number(target.dataset.questionId));
+      toggleAnswers(Number(target.dataset.questionId), target);
     }
     if (action === "submit-answer") {
       openAnswerModal(Number(target.dataset.questionId));
     }
-    if (action === "like-answer") {
-      likeAnswer(Number(target.dataset.answerId), Number(target.dataset.questionId));
+    if (action === "toggle-answer-like") {
+      toggleAnswerLike(
+        Number(target.dataset.answerId),
+        Number(target.dataset.questionId),
+        target.dataset.liked === "true"
+      );
     }
     if (action === "load-comments") {
-      loadComments(Number(target.dataset.answerId));
+      toggleComments(Number(target.dataset.answerId), target);
     }
     if (action === "add-comment") {
       openCommentModal(Number(target.dataset.answerId), Number(target.dataset.questionId));
@@ -136,12 +137,33 @@ async function loadQuestions(keyword = "") {
     const questions = await apiRequest(path, {
       headers: getAuthHeaders("USER")
     });
+    const questionsWithStats = await hydrateQuestionStats(questions || []);
 
-    updateStat("questionCount", questions?.length || 0);
-    updateStat("sideQuestionCount", questions?.length || 0);
-    renderCards("questionsList", questions, renderQuestionCard, "No approved questions are available yet.");
+    updateStat("questionCount", questionsWithStats.length);
+    updateStat("sideQuestionCount", questionsWithStats.length);
+    renderCards("questionsList", questionsWithStats, renderQuestionCard, "No approved questions are available yet.");
   } catch (error) {
     showToast(error.message, "error");
+  }
+}
+
+async function hydrateQuestionStats(questions) {
+  return Promise.all((questions || []).map(async question => {
+    const answerCount = await getApprovedAnswerCount(Number(question.id));
+    return { ...question, answerCount };
+  }));
+}
+
+async function getApprovedAnswerCount(questionId) {
+  if (!questionId) return 0;
+
+  try {
+    const answers = await apiRequest(`/api/answers/question/${questionId}`, {
+      headers: getAuthHeaders("USER")
+    });
+    return answers?.length || 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -153,11 +175,12 @@ function searchQuestions() {
 function renderQuestionCard(question) {
   const id = Number(question.id);
   const answerCount = Number(question.answerCount || question.answersCount || question.totalAnswers || 0);
+  const threadState = question.resolved ? "Closed" : "Open";
   return `
-    <article class="question-row">
+    <article class="question-row" data-question-id="${id}">
       <div class="question-stats">
-        <div><strong>${answerCount}</strong><span>answers</span></div>
-        <div class="${question.resolved ? "resolved-count" : ""}"><strong>${question.resolved ? "Yes" : "No"}</strong><span>resolved</span></div>
+        <div><strong data-question-answer-count>${answerCount}</strong><span>${answerCount === 1 ? "answer" : "answers"}</span></div>
+        <div class="${question.resolved ? "resolved-count" : "open-count"}"><strong>${threadState}</strong><span>thread</span></div>
       </div>
       <div class="question-summary">
         <div class="question-title-row">
@@ -167,11 +190,11 @@ function renderQuestionCard(question) {
         <p>${escapeHtml(question.description)}</p>
         <div class="question-tags">
           <span class="topic-chip">${escapeHtml(question.topic)}</span>
-          <span>User #${escapeHtml(question.userId)}</span>
+          <span>${userIdentityLabel(question.userId, userDirectory)}</span>
           <span>${question.resolved ? "Closed thread" : "Active thread"}</span>
         </div>
         <div class="card-actions compact-actions">
-          <button class="secondary-btn" data-action="load-answers" data-question-id="${id}">View Answers</button>
+          <button class="secondary-btn" data-action="load-answers" data-question-id="${id}" data-answers-visible="false">View Answers</button>
           <button data-action="submit-answer" data-question-id="${id}">Submit Answer</button>
         </div>
         <div id="answers-${id}" class="answers-region"></div>
@@ -218,7 +241,7 @@ async function submitAnswer(event, modal) {
     modal?.setBusy(false);
     modal?.close();
     showToast(`Answer submitted for admin approval. ID: ${data.id}`);
-    await loadAnswers(questionId);
+    await loadAnswers(questionId, getAnswersButton(questionId));
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -226,29 +249,70 @@ async function submitAnswer(event, modal) {
   }
 }
 
-async function loadAnswers(questionId) {
+function getAnswersButton(questionId) {
+  return document.querySelector(`[data-action="load-answers"][data-question-id="${questionId}"]`);
+}
+
+async function toggleAnswers(questionId, button) {
   const container = document.getElementById(`answers-${questionId}`);
   if (!container) return;
+
+  const isVisible = button?.dataset.answersVisible === "true";
+  if (isVisible) {
+    container.innerHTML = "";
+    container.hidden = true;
+    if (button) {
+      button.dataset.answersVisible = "false";
+      button.textContent = "View Answers";
+    }
+    return;
+  }
+
+  await loadAnswers(questionId, button);
+}
+
+async function loadAnswers(questionId, button = getAnswersButton(questionId)) {
+  const container = document.getElementById(`answers-${questionId}`);
+  if (!container) return;
+  container.hidden = false;
   container.innerHTML = `<div class="empty-state">Loading answers...</div>`;
 
+  if (button) {
+    button.dataset.answersVisible = "true";
+    button.textContent = "Hide Answers";
+  }
+
   try {
+    const currentUserId = await ensureCurrentUserId();
     const answers = await apiRequest(`/api/answers/question/${questionId}`, {
       headers: getAuthHeaders("USER")
     });
 
     const answersWithLikes = await Promise.all((answers || []).map(async answer => {
       try {
-        const likes = await apiRequest(`/api/interactions/likes/count/${answer.id}`, {
+        const likes = await apiRequest(`/api/interactions/likes/answer/${answer.id}`, {
           headers: getAuthHeaders("USER")
         });
-        return { ...answer, likes };
+        return {
+          ...answer,
+          likes: likes?.length || 0,
+          likedByCurrentUser: (likes || []).some(like => Number(like.userId) === Number(currentUserId))
+        };
       } catch {
-        return { ...answer, likes: 0 };
+        try {
+          const likes = await apiRequest(`/api/interactions/likes/count/${answer.id}`, {
+            headers: getAuthHeaders("USER")
+          });
+          return { ...answer, likes, likedByCurrentUser: false };
+        } catch {
+          return { ...answer, likes: 0, likedByCurrentUser: false };
+        }
       }
     }));
 
     updateStat("answerCount", answersWithLikes.length);
     updateStat("sideAnswerCount", answersWithLikes.length);
+    updateQuestionAnswerCount(questionId, answersWithLikes.length);
 
     if (!answersWithLikes.length) {
       container.innerHTML = `<div class="empty-state">No approved answers yet.</div>`;
@@ -261,8 +325,18 @@ async function loadAnswers(questionId) {
   }
 }
 
+function updateQuestionAnswerCount(questionId, answerCount) {
+  const row = document.querySelector(`.question-row[data-question-id="${questionId}"]`);
+  const count = row?.querySelector("[data-question-answer-count]");
+  const label = count?.nextElementSibling;
+
+  if (count) count.textContent = answerCount;
+  if (label) label.textContent = answerCount === 1 ? "answer" : "answers";
+}
+
 function renderAnswerCard(answer, questionId) {
   const id = Number(answer.id);
+  const liked = answer.likedByCurrentUser === true;
   return `
     <article class="answer-card">
       <div class="card-topline">
@@ -271,12 +345,12 @@ function renderAnswerCard(answer, questionId) {
       </div>
       <p>${escapeHtml(answer.content)}</p>
       <div class="meta">
-        <span>User #${escapeHtml(answer.userId)}</span>
+        <span>${userIdentityLabel(answer.userId, userDirectory)}</span>
         <span>${Number(answer.likes || 0)} likes</span>
       </div>
       <div class="card-actions">
-        <button class="secondary-btn" data-action="like-answer" data-answer-id="${id}" data-question-id="${questionId}">Like</button>
-        <button class="secondary-btn" data-action="load-comments" data-answer-id="${id}">Show Comments</button>
+        <button class="secondary-btn" data-action="toggle-answer-like" data-answer-id="${id}" data-question-id="${questionId}" data-liked="${liked}">${liked ? "Unlike" : "Like"}</button>
+        <button class="secondary-btn" data-action="load-comments" data-answer-id="${id}" data-comments-visible="false">Show Comments</button>
         <button data-action="add-comment" data-answer-id="${id}" data-question-id="${questionId}">Add Comment</button>
       </div>
       <div id="comments-${id}" class="comments-region"></div>
@@ -284,15 +358,23 @@ function renderAnswerCard(answer, questionId) {
   `;
 }
 
-async function likeAnswer(answerId, questionId) {
+async function toggleAnswerLike(answerId, questionId, liked) {
   try {
     const userId = await ensureCurrentUserId();
-    await apiRequest("/api/interactions/likes", {
-      method: "POST",
-      headers: getAuthHeaders("USER"),
-      body: JSON.stringify({ answerId, userId })
-    });
-    showToast("Answer liked.");
+    if (liked) {
+      await apiRequest(`/api/interactions/likes?answerId=${answerId}&userId=${userId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders("USER")
+      });
+      showToast("Answer unliked.");
+    } else {
+      await apiRequest("/api/interactions/likes", {
+        method: "POST",
+        headers: getAuthHeaders("USER"),
+        body: JSON.stringify({ answerId, userId })
+      });
+      showToast("Answer liked.");
+    }
     await loadAnswers(questionId);
   } catch (error) {
     showToast(error.message, "error");
@@ -336,7 +418,7 @@ async function submitComment(event, modal) {
     modal?.setBusy(false);
     modal?.close();
     showToast("Comment added.");
-    await loadComments(answerId);
+    await loadComments(answerId, getCommentsButton(answerId));
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -344,10 +426,38 @@ async function submitComment(event, modal) {
   }
 }
 
-async function loadComments(answerId) {
+function getCommentsButton(answerId) {
+  return document.querySelector(`[data-action="load-comments"][data-answer-id="${answerId}"]`);
+}
+
+async function toggleComments(answerId, button) {
   const container = document.getElementById(`comments-${answerId}`);
   if (!container) return;
+
+  const isVisible = button?.dataset.commentsVisible === "true";
+  if (isVisible) {
+    container.innerHTML = "";
+    container.hidden = true;
+    if (button) {
+      button.dataset.commentsVisible = "false";
+      button.textContent = "Show Comments";
+    }
+    return;
+  }
+
+  await loadComments(answerId, button);
+}
+
+async function loadComments(answerId, button = getCommentsButton(answerId)) {
+  const container = document.getElementById(`comments-${answerId}`);
+  if (!container) return;
+  container.hidden = false;
   container.innerHTML = `<div class="empty-state">Loading comments...</div>`;
+
+  if (button) {
+    button.dataset.commentsVisible = "true";
+    button.textContent = "Hide Comments";
+  }
 
   try {
     const comments = await apiRequest(`/api/interactions/comments/answer/${answerId}`, {
@@ -361,7 +471,7 @@ async function loadComments(answerId) {
 
     container.innerHTML = comments.map(comment => `
       <div class="comment-row">
-        <span>User #${escapeHtml(comment.userId)}</span>
+        <span>${userIdentityLabel(comment.userId, userDirectory)}</span>
         <p>${escapeHtml(comment.comment)}</p>
       </div>
     `).join("");
@@ -403,8 +513,8 @@ function renderContactButton(user) {
     <button type="button" class="contact-item ${Number(selectedChatUserId) === id ? "active" : ""}" data-action="select-user" data-user-id="${id}">
       <span class="contact-avatar">${initial}</span>
       <span>
-        <strong>#${id} ${accountLabel(user, "User")}</strong>
-        <small>${escapeHtml(user.email)} - ${getStatusLabel(user)}</small>
+        <strong>${accountLabel(user, "User")}</strong>
+        <small>User #${id} - ${escapeHtml(user.email)} - ${getStatusLabel(user)}</small>
       </span>
     </button>
   `;
@@ -459,9 +569,8 @@ async function selectChatUser(userId) {
 }
 
 function updateConversationHeader() {
-  const selectedUser = userDirectory.find(user => Number(user.id) === Number(selectedChatUserId));
-  const title = selectedUser
-    ? `#${selectedUser.id} ${selectedUser.name || selectedUser.email || "User"}`
+  const title = selectedChatUserId
+    ? userDisplayName(selectedChatUserId, userDirectory)
     : "Choose a user";
   setText("conversationTitle", title);
 }
@@ -530,7 +639,7 @@ async function loadConversation(preselectedUserId) {
     renderCards("chatList", messages, message => `
       <article class="chat-bubble ${Number(message.senderId) === Number(userOneId) ? "mine" : ""}">
         <div class="meta">
-          <span>${Number(message.senderId) === Number(userOneId) ? "You" : `User #${escapeHtml(message.senderId)}`}</span>
+          <span>${Number(message.senderId) === Number(userOneId) ? "You" : userIdentityLabel(message.senderId, userDirectory)}</span>
           <span>${formatDate(message.createdAt)}</span>
         </div>
         <p>${escapeHtml(message.message)}</p>

@@ -69,6 +69,22 @@ function clearSession(role = "USER") {
   localStorage.removeItem(config.nameKey);
 }
 
+async function logoutSession(role = "USER") {
+  const endpoint = role === "ADMIN" ? "/api/admins/logout" : "/api/users/logout";
+
+  try {
+    await apiRequest(endpoint, {
+      method: "POST",
+      headers: getAuthHeaders(role)
+    });
+  } catch {
+    // Logout is token cleanup on this app; backend notification is best effort.
+  }
+
+  clearSession(role);
+  window.location.href = getRoleConfig(role).loginPage;
+}
+
 function requireSession(role = "USER") {
   const session = getSession(role);
   if (!session.token) {
@@ -197,9 +213,31 @@ function accountLabel(item, fallback = "Account") {
   return escapeHtml(item?.name || item?.email || `${fallback} #${item?.id || ""}`);
 }
 
+function findUserById(users, userId) {
+  return (users || []).find(user => Number(user.id) === Number(userId));
+}
+
+function userDisplayName(userId, users = []) {
+  const user = findUserById(users, userId);
+  return user?.name || user?.email || `User #${safe(userId)}`;
+}
+
+function userIdentityLabel(userId, users = [], options = {}) {
+  const includeId = options.includeId !== false;
+  const name = userDisplayName(userId, users);
+  const idLabel = `User #${safe(userId)}`;
+
+  if (!includeId || name === idLabel) {
+    return escapeHtml(name);
+  }
+
+  return `${escapeHtml(name)} <small>${escapeHtml(idLabel)}</small>`;
+}
+
 function getStatusLabel(item) {
   if (item?.active === false) return "Inactive";
   if (item?.resolved === true) return "Resolved";
+  if (item?.rejected === true) return "Rejected";
   if (item?.approved === true) return "Approved";
   if (item?.approved === false) return "Pending";
   return item?.active === true ? "Active" : "Available";

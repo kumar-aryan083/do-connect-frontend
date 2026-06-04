@@ -63,14 +63,13 @@ async function bootAdminDashboard() {
 }
 
 function bindAdminEvents() {
-  document.getElementById("logoutBtn")?.addEventListener("click", () => {
-    clearSession("ADMIN");
-    window.location.href = "admin-login.html";
-  });
+  document.getElementById("logoutBtn")?.addEventListener("click", () => logoutSession("ADMIN"));
 
   document.getElementById("refreshOverviewBtn")?.addEventListener("click", () => loadOverview());
+  document.getElementById("openAdminQuestionModalBtn")?.addEventListener("click", openAdminQuestionCreateModal);
   document.getElementById("loadQuestionsBtn")?.addEventListener("click", () => loadQuestions());
   document.getElementById("loadAnswersBtn")?.addEventListener("click", () => loadAnswers());
+  document.getElementById("openAdminUserModalBtn")?.addEventListener("click", openAdminUserCreateModal);
   document.getElementById("loadUsersBtn")?.addEventListener("click", () => loadUsers());
   document.getElementById("loadAdminsBtn")?.addEventListener("click", () => loadAdmins());
   document.getElementById("loadCommentsBtn")?.addEventListener("click", () => loadComments());
@@ -125,18 +124,29 @@ async function refreshAdminResource(resource) {
     state.loading = false;
     state.error = error;
 
-    if (!isExpectedAdminPermissionError(resource, error)) {
-      showToast(error.message, "error");
-    }
+    showToast(error.message, "error");
   }
 
   updateAdminStats();
   renderAdminResource(resource);
+  if (resource === "users") {
+    renderNameAwareAdminResources();
+  }
   return adminStats[resource];
 }
 
 function renderAdminResource(resource) {
   adminResourceConfig[resource]?.renderer?.();
+}
+
+function renderNameAwareAdminResources() {
+  if (adminResourceState.questions.loaded) renderFilteredQuestions();
+  if (adminResourceState.answers.loaded) renderFilteredAnswers();
+}
+
+async function ensureAdminUsersLoaded() {
+  if (adminResourceState.users.loaded || adminResourceState.users.loading) return;
+  await refreshAdminResource("users");
 }
 
 function handleAdminSectionOpen(sectionId) {
@@ -155,16 +165,12 @@ function handleAdminSectionOpen(sectionId) {
   }
 }
 
-function isExpectedAdminPermissionError(resource, error) {
-  return resource === "users" && (error?.status === 403 || safe(error?.message).includes("403"));
-}
-
 function updateAdminStats(partial = {}) {
   Object.assign(adminStats, partial);
   updateStat("totalUsers", adminResourceState.users.error ? "--" : adminStats.users.length);
   updateStat("totalAdmins", adminStats.admins.length);
-  updateStat("pendingQuestions", adminStats.questions.filter(item => item.approved === false && item.active !== false).length);
-  updateStat("pendingAnswers", adminStats.answers.filter(item => item.approved === false && item.active !== false).length);
+  updateStat("pendingQuestions", adminStats.questions.filter(isPendingModerationItem).length);
+  updateStat("pendingAnswers", adminStats.answers.filter(isPendingModerationItem).length);
 }
 
 function renderAdminListState(containerId, resource, loadingText, unavailableText) {
@@ -178,8 +184,7 @@ function renderAdminListState(containerId, resource, loadingText, unavailableTex
   }
 
   if (state.error) {
-    const isPermission = isExpectedAdminPermissionError(resource, state.error);
-    container.innerHTML = `<div class="empty-state ${isPermission ? "" : "error-text"}">${escapeHtml(isPermission ? unavailableText : state.error.message)}</div>`;
+    container.innerHTML = `<div class="empty-state error-text">${escapeHtml(state.error.message || unavailableText)}</div>`;
     return true;
   }
 
@@ -208,23 +213,34 @@ function getFilteredRecords(key, records) {
 
 function matchesAdminSearch(item, fields, keyword) {
   if (!keyword) return true;
-  return fields.some(field => safe(item?.[field]).toLowerCase().includes(keyword));
+  const fieldMatch = fields.some(field => safe(item?.[field]).toLowerCase().includes(keyword));
+  if (fieldMatch) return true;
+
+  if (item?.userId === undefined || item?.userId === null) return false;
+  const user = findUserById(adminStats.users, item.userId);
+  const userHaystack = `${safe(user?.name)} ${safe(user?.email)} ${safe(user?.role)} User #${safe(item.userId)}`.toLowerCase();
+  return userHaystack.includes(keyword);
 }
 
 function matchesAdminStatus(item, status) {
   if (status === "all") return true;
   if (status === "inactive") return item?.active === false;
   if (status === "active") return item?.active !== false;
-  if (status === "pending") return item?.approved === false && item?.active !== false;
+  if (status === "pending") return isPendingModerationItem(item);
+  if (status === "rejected") return item?.rejected === true && item?.active !== false;
   if (status === "approved") return item?.approved === true && item?.resolved !== true && item?.active !== false;
   if (status === "resolved") return item?.resolved === true && item?.active !== false;
   return true;
 }
 
+function isPendingModerationItem(item) {
+  return item?.approved === false && item?.rejected !== true && item?.active !== false;
+}
+
 function renderOverview() {
   const { questions = [], answers = [] } = adminStats;
-  const pendingQuestions = questions.filter(item => item.approved === false && item.active !== false).slice(0, 5);
-  const pendingAnswers = answers.filter(item => item.approved === false && item.active !== false).slice(0, 5);
+  const pendingQuestions = questions.filter(isPendingModerationItem).slice(0, 5);
+  const pendingAnswers = answers.filter(isPendingModerationItem).slice(0, 5);
   const userState = adminResourceState.users;
 
   document.getElementById("overviewList").innerHTML = `
@@ -249,7 +265,7 @@ function renderOverview() {
     ${userState.error ? `
       <article class="panel-card">
         <h3>User Directory</h3>
-        <div class="empty-state">User list is unavailable for this admin token. Other moderation data is still loaded.</div>
+        <div class="empty-state error-text">${escapeHtml(userState.error.message || "User list is unavailable.")}</div>
       </article>
     ` : ""}
   `;
@@ -258,6 +274,52 @@ function renderOverview() {
 async function loadQuestions() {
   await refreshAdminResource("questions");
   renderOverview();
+}
+
+function openAdminQuestionCreateModal() {
+  openModal({
+    title: "Create question",
+    eyebrow: "Question CRUD",
+    tone: "admin",
+    submitText: "Create Question",
+    body: `
+      <form class="form-stack">
+        <label for="modalQuestionTitle">Title</label>
+        <input id="modalQuestionTitle" name="title" placeholder="Title" required />
+        <label for="modalQuestionTopic">Topic</label>
+        <input id="modalQuestionTopic" name="topic" placeholder="Topic" required />
+        <label for="modalQuestionUserId">Owner user ID</label>
+        <input id="modalQuestionUserId" name="userId" type="number" min="1" placeholder="User ID" required />
+        <label for="modalQuestionDescription">Description</label>
+        <textarea id="modalQuestionDescription" name="description" required></textarea>
+      </form>
+    `,
+    onSubmit: createAdminQuestion
+  });
+}
+
+async function createAdminQuestion(event, modal) {
+  event.preventDefault();
+  const form = event.target;
+  modal?.setBusy(true, "Creating...");
+
+  try {
+    await runAdminAction({
+      method: "POST",
+      path: "/api/questions",
+      body: {
+        title: form.elements.title.value.trim(),
+        topic: form.elements.topic.value.trim(),
+        description: form.elements.description.value.trim(),
+        userId: Number(form.elements.userId.value)
+      },
+      message: "Question created."
+    }, loadQuestions, { throwOnError: true });
+    modal?.setBusy(false);
+    modal?.close();
+  } catch {
+    modal?.setBusy(false);
+  }
 }
 
 function renderFilteredQuestions() {
@@ -272,6 +334,13 @@ function renderFilteredQuestions() {
 
 function renderQuestionModerationCard(question) {
   const id = Number(question.id);
+  const active = question.active !== false;
+  const approved = question.approved === true;
+  const resolved = question.resolved === true;
+  const rejected = question.rejected === true;
+  const canApproveReject = active && !approved && !resolved && !rejected;
+  const canResolve = active && !resolved && !rejected;
+
   return `
     <article class="moderation-card">
       <div class="card-topline">
@@ -281,16 +350,18 @@ function renderQuestionModerationCard(question) {
       <h3>#${id} ${escapeHtml(question.title)}</h3>
       <p>${escapeHtml(question.description)}</p>
       <div class="meta">
-        <span>User #${escapeHtml(question.userId)}</span>
+        <span>${userIdentityLabel(question.userId, adminStats.users)}</span>
         <span>Active: ${escapeHtml(question.active)}</span>
         <span>Resolved: ${escapeHtml(question.resolved)}</span>
       </div>
       <div class="card-actions">
-        <button data-action="approve-question" data-id="${id}" class="success-btn">Approve</button>
-        <button data-action="reject-question" data-id="${id}" class="secondary-btn">Reject</button>
-        <button data-action="resolve-question" data-id="${id}" class="secondary-btn">Resolve</button>
+        <button data-action="approve-question" data-id="${id}" class="success-btn" ${canApproveReject ? "" : "disabled"}>${approved ? "Approved" : rejected ? "Rejected" : "Approve"}</button>
+        <button data-action="reject-question" data-id="${id}" class="secondary-btn" ${canApproveReject ? "" : "disabled"}>${rejected ? "Rejected" : "Reject"}</button>
+        <button data-action="resolve-question" data-id="${id}" class="secondary-btn" ${canResolve ? "" : "disabled"}>${resolved ? "Resolved" : "Resolve"}</button>
         <button data-action="edit-question" data-id="${id}" class="secondary-btn">Edit</button>
-        <button data-action="delete-question" data-id="${id}" class="danger ghost-btn">Deactivate</button>
+        ${active
+          ? `<button data-action="delete-question" data-id="${id}" class="danger ghost-btn">Deactivate</button>`
+          : `<button data-action="activate-question" data-id="${id}" class="success-btn">Reactivate</button>`}
       </div>
     </article>
   `;
@@ -306,7 +377,8 @@ async function handleQuestionClick(event) {
     "approve-question": { method: "PUT", path: `/api/questions/${id}/approve`, message: "Question approved." },
     "reject-question": { method: "PUT", path: `/api/questions/${id}/reject`, message: "Question rejected." },
     "resolve-question": { method: "PUT", path: `/api/questions/${id}/resolve`, message: "Question marked resolved." },
-    "delete-question": { method: "DELETE", path: `/api/questions/${id}`, message: "Question deactivated." }
+    "delete-question": { method: "DELETE", path: `/api/questions/${id}`, message: "Question deactivated." },
+    "activate-question": { method: "PUT", path: `/api/questions/${id}/activate`, message: "Question reactivated." }
   };
 
   if (action === "edit-question") {
@@ -321,6 +393,11 @@ async function handleQuestionClick(event) {
       config: paths[action],
       reload: loadQuestions
     });
+    return;
+  }
+
+  if (action === "activate-question") {
+    await runAdminAction(paths[action], loadQuestions);
     return;
   }
 
@@ -405,6 +482,11 @@ function renderFilteredAnswers() {
 
 function renderAnswerModerationCard(answer) {
   const id = Number(answer.id);
+  const active = answer.active !== false;
+  const approved = answer.approved === true;
+  const rejected = answer.rejected === true;
+  const canApproveReject = active && !approved && !rejected;
+
   return `
     <article class="moderation-card">
       <div class="card-topline">
@@ -414,14 +496,16 @@ function renderAnswerModerationCard(answer) {
       <p>${escapeHtml(answer.content)}</p>
       <div class="meta">
         <span>Question #${escapeHtml(answer.questionId)}</span>
-        <span>User #${escapeHtml(answer.userId)}</span>
+        <span>${userIdentityLabel(answer.userId, adminStats.users)}</span>
         <span>Active: ${escapeHtml(answer.active)}</span>
       </div>
       <div class="card-actions">
-        <button data-action="approve-answer" data-id="${id}" class="success-btn">Approve</button>
-        <button data-action="reject-answer" data-id="${id}" class="secondary-btn">Reject</button>
+        <button data-action="approve-answer" data-id="${id}" class="success-btn" ${canApproveReject ? "" : "disabled"}>${approved ? "Approved" : rejected ? "Rejected" : "Approve"}</button>
+        <button data-action="reject-answer" data-id="${id}" class="secondary-btn" ${canApproveReject ? "" : "disabled"}>${rejected ? "Rejected" : "Reject"}</button>
         <button data-action="edit-answer" data-id="${id}" class="secondary-btn">Edit</button>
-        <button data-action="delete-answer" data-id="${id}" class="danger ghost-btn">Deactivate</button>
+        ${active
+          ? `<button data-action="delete-answer" data-id="${id}" class="danger ghost-btn">Deactivate</button>`
+          : `<button data-action="activate-answer" data-id="${id}" class="success-btn">Reactivate</button>`}
       </div>
     </article>
   `;
@@ -436,7 +520,8 @@ async function handleAnswerClick(event) {
   const paths = {
     "approve-answer": { method: "PUT", path: `/api/answers/${id}/approve`, message: "Answer approved." },
     "reject-answer": { method: "PUT", path: `/api/answers/${id}/reject`, message: "Answer rejected." },
-    "delete-answer": { method: "DELETE", path: `/api/answers/${id}`, message: "Answer deactivated." }
+    "delete-answer": { method: "DELETE", path: `/api/answers/${id}`, message: "Answer deactivated." },
+    "activate-answer": { method: "PUT", path: `/api/answers/${id}/activate`, message: "Answer reactivated." }
   };
 
   if (action === "edit-answer") {
@@ -451,6 +536,11 @@ async function handleAnswerClick(event) {
       config: paths[action],
       reload: loadAnswers
     });
+    return;
+  }
+
+  if (action === "activate-answer") {
+    await runAdminAction(paths[action], loadAnswers);
     return;
   }
 
@@ -516,6 +606,49 @@ async function loadUsers() {
   renderOverview();
 }
 
+function openAdminUserCreateModal() {
+  openModal({
+    title: "Create user",
+    eyebrow: "User CRUD",
+    tone: "admin",
+    submitText: "Create User",
+    body: `
+      <form class="form-stack">
+        <label for="modalAccountName">Name</label>
+        <input id="modalAccountName" name="name" placeholder="Name" required />
+        <label for="modalAccountEmail">Email</label>
+        <input id="modalAccountEmail" name="email" type="email" placeholder="user@example.com" required />
+        <label for="modalAccountPassword">Password</label>
+        <input id="modalAccountPassword" name="password" type="password" placeholder="At least 6 characters" required minlength="6" />
+      </form>
+    `,
+    onSubmit: createAdminUser
+  });
+}
+
+async function createAdminUser(event, modal) {
+  event.preventDefault();
+  const form = event.target;
+  modal?.setBusy(true, "Creating...");
+
+  try {
+    await runAdminAction({
+      method: "POST",
+      path: "/api/users/register",
+      body: {
+        name: form.elements.name.value.trim(),
+        email: form.elements.email.value.trim(),
+        password: form.elements.password.value
+      },
+      message: "User created."
+    }, loadUsers, { throwOnError: true });
+    modal?.setBusy(false);
+    modal?.close();
+  } catch {
+    modal?.setBusy(false);
+  }
+}
+
 async function loadAdmins() {
   await refreshAdminResource("admins");
   renderOverview();
@@ -544,20 +677,25 @@ function renderFilteredAdmins() {
 function renderAccountCard(account, type) {
   const id = Number(account.id);
   const isAdmin = type === "admin";
+  const active = account.active !== false;
+
   return `
     <article class="moderation-card">
       <div class="card-topline">
-        <strong>#${id} ${accountLabel(account, isAdmin ? "Admin" : "User")}</strong>
+        <strong>${accountLabel(account, isAdmin ? "Admin" : "User")}</strong>
         ${statusBadge(account)}
       </div>
       <p>${escapeHtml(account.email)}</p>
       <div class="meta">
+        <span>${isAdmin ? "Admin" : "User"} #${id}</span>
         <span>Role: ${escapeHtml(account.role)}</span>
         <span>Created: ${formatDate(account.createdAt)}</span>
       </div>
       <div class="card-actions">
         <button data-action="edit-${type}" data-id="${id}" class="secondary-btn">Edit</button>
-        <button data-action="delete-${type}" data-id="${id}" class="danger ghost-btn">Deactivate</button>
+        ${active
+          ? `<button data-action="delete-${type}" data-id="${id}" class="danger ghost-btn">Deactivate</button>`
+          : `<button data-action="activate-${type}" data-id="${id}" class="success-btn">Reactivate</button>`}
       </div>
     </article>
   `;
@@ -586,6 +724,14 @@ async function handleUserClick(event) {
       reload: loadUsers
     });
   }
+
+  if (action === "activate-user") {
+    await runAdminAction({
+      method: "PUT",
+      path: `/api/users/${id}/activate`,
+      message: "User reactivated."
+    }, loadUsers);
+  }
 }
 
 async function handleAdminClick(event) {
@@ -611,6 +757,14 @@ async function handleAdminClick(event) {
       reload: loadAdmins
     });
   }
+
+  if (action === "activate-admin") {
+    await runAdminAction({
+      method: "PUT",
+      path: `/api/admins/${id}/activate`,
+      message: "Admin reactivated."
+    }, loadAdmins);
+  }
 }
 
 function openAccountEditModal(account, type) {
@@ -629,7 +783,7 @@ function openAccountEditModal(account, type) {
         <label for="modalAccountEmail">Email</label>
         <input id="modalAccountEmail" name="email" type="email" value="${escapeHtml(account.email)}" placeholder="Email" required />
         <label for="modalAccountPassword">New password</label>
-        <input id="modalAccountPassword" name="password" type="password" placeholder="Required by API" required minlength="6" />
+        <input id="modalAccountPassword" name="password" type="password" placeholder="Leave blank to keep current password" minlength="6" />
       </form>
     `,
     onSubmit: updateAccount
@@ -641,16 +795,21 @@ async function updateAccount(event, modal) {
   const form = event.target;
   const id = Number(form.dataset.id);
   const resource = form.dataset.resource;
+  const body = {
+    name: form.elements.name.value.trim(),
+    email: form.elements.email.value.trim()
+  };
+
+  if (form.elements.password.value) {
+    body.password = form.elements.password.value;
+  }
+
   modal?.setBusy(true, "Saving...");
   try {
     await runAdminAction({
       method: "PUT",
       path: `/api/${resource}/${id}`,
-      body: {
-        name: form.elements.name.value.trim(),
-        email: form.elements.email.value.trim(),
-        password: form.elements.password.value
-      },
+      body,
       message: `${resource === "admins" ? "Admin" : "User"} updated.`
     }, resource === "admins" ? loadAdmins : loadUsers, { throwOnError: true });
     modal?.setBusy(false);
@@ -662,6 +821,7 @@ async function updateAccount(event, modal) {
 
 async function loadComments() {
   try {
+    await ensureAdminUsersLoaded();
     const answerId = Number(document.getElementById("commentAnswerId").value);
     if (!answerId) throw new Error("Enter an answer ID to load comments.");
 
@@ -678,10 +838,12 @@ async function loadComments() {
         <p>${escapeHtml(comment.comment)}</p>
         <div class="meta">
           <span>Answer #${escapeHtml(comment.answerId)}</span>
-          <span>User #${escapeHtml(comment.userId)}</span>
+          <span>${userIdentityLabel(comment.userId, adminStats.users)}</span>
         </div>
         <div class="card-actions">
-          <button data-action="delete-comment" data-id="${escapeHtml(comment.id)}" class="danger ghost-btn">Deactivate</button>
+          ${comment.active !== false
+            ? `<button data-action="delete-comment" data-id="${escapeHtml(comment.id)}" class="danger ghost-btn">Deactivate</button>`
+            : `<button data-action="activate-comment" data-id="${escapeHtml(comment.id)}" class="success-btn">Reactivate</button>`}
         </div>
       </article>
     `, "No comments found for this answer.");
@@ -692,8 +854,19 @@ async function loadComments() {
 
 async function handleCommentClick(event) {
   const target = event.target.closest("[data-action]");
-  if (target?.dataset.action !== "delete-comment") return;
+  const action = target?.dataset.action;
+  if (action !== "delete-comment" && action !== "activate-comment") return;
   const id = Number(target.dataset.id);
+
+  if (action === "activate-comment") {
+    await runAdminAction({
+      method: "PUT",
+      path: `/api/interactions/comments/${id}/activate`,
+      message: "Comment reactivated."
+    }, loadComments);
+    return;
+  }
+
   confirmAdminAction({
     title: `Deactivate comment #${id}`,
     message: "Deactivate this comment and remove it from active comment lists?",
@@ -708,6 +881,7 @@ async function handleCommentClick(event) {
 
 async function loadMessages() {
   try {
+    await ensureAdminUsersLoaded();
     const userId = Number(document.getElementById("chatUserId").value);
     if (!userId) throw new Error("Enter a user ID to load messages.");
 
@@ -718,7 +892,7 @@ async function loadMessages() {
     renderCards("chatList", messages, message => `
       <article class="chat-bubble">
         <div class="meta">
-          <span>${escapeHtml(message.senderId)} to ${escapeHtml(message.receiverId)}</span>
+          <span>${userIdentityLabel(message.senderId, adminStats.users)} to ${userIdentityLabel(message.receiverId, adminStats.users)}</span>
           <span>${formatDate(message.createdAt)}</span>
           <span>${getStatusLabel(message)}</span>
         </div>
